@@ -2,11 +2,14 @@
 # Solana & Anchor Framework
 # ==========================================
 .anchor/
+.surfpool/
 target/
+runbooks/
 **/*.keypair.json
 **/*-keypair.json
 test-ledger/
 .program-id.json
+txtx.yml
 
 # ==========================================
 # Node / Next.js / Frontend
