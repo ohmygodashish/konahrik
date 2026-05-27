@@ -14,11 +14,8 @@ konahrik = "3AhgyMSPhsKQFevVwGF2XNcDs8wBDxjz7g1HotFNNPWp"
 konahrik = "3AhgyMSPhsKQFevVwGF2XNcDs8wBDxjz7g1HotFNNPWp"
 
 [provider]
-cluster = "devnet"
+cluster = "localnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]
 test = "yarn ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
-
-[surfpool]
-online = false
