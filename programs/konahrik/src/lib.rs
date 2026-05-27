@@ -20,6 +20,10 @@ pub mod konahrik {
         ctx: Context<InitializeAmm>,
         params: InitializeAmmParams,
     ) -> Result<()> {
-        instructions::initialize_amm::handler(ctx, params)
+        instructions::handle_initialize_amm(ctx, params)
+    }
+
+    pub fn deposit_margin(ctx: Context<DepositMargin>, amount: u64) -> Result<()> {
+        instructions::handle_deposit_margin(ctx, amount)
     }
 }

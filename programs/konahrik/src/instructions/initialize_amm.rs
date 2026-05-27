@@ -55,7 +55,7 @@ pub struct InitializeAmmParams {
     pub funding_period: i64,
 }
 
-pub fn handler(ctx: Context<InitializeAmm>, params: InitializeAmmParams) -> Result<()> {
+pub fn handle_initialize_amm(ctx: Context<InitializeAmm>, params: InitializeAmmParams) -> Result<()> {
     require!(
         params.initial_base_reserve > 0 && params.initial_quote_reserve > 0,
         KonahrikError::InsufficientAmount
