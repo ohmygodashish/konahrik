@@ -22,7 +22,6 @@ custom-panic = []
 [dependencies]
 anchor-lang = { version = "1.0.1", features = ["init-if-needed"] }
 anchor-spl = "1.0.1"
-pyth-solana-receiver-sdk = "0.4.0"
 
 
 [lints.rust]
