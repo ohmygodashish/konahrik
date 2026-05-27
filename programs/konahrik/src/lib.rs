@@ -16,7 +16,10 @@ declare_id!("3AhgyMSPhsKQFevVwGF2XNcDs8wBDxjz7g1HotFNNPWp");
 pub mod konahrik {
     use super::*;
 
-    pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
-        initialize::handler(ctx)
+    pub fn initialize_amm(
+        ctx: Context<InitializeAmm>,
+        params: InitializeAmmParams,
+    ) -> Result<()> {
+        instructions::initialize_amm::handler(ctx, params)
     }
 }

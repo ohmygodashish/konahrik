@@ -1,6 +1,6 @@
 # Product Requirements Document
 ## Project: Konahrik - vAMM Perpetuals DEX
-**Version:** 2.1 (Updated for Anchor 1.0.1, Next.js 16.2.x, Node 22+)
+**Version:** 2.2 (Updated for Anchor 1.0.1, Next.js 16.2.x, Node 22+, Pyth manual deserialization)
 **Target:** Solana India Fellowship Capstone Project
 **Network:** Devnet
 **Stack:** Anchor 1.0.1 (Rust) · Next.js 16.2.x · Tailwind CSS · TypeScript · Pyth Oracle · Node.js 22+
@@ -234,7 +234,7 @@ user                   [signer]
 user_margin_account    PDA [b"margin", user.key()]        mut, has_one = owner (user)
 position               PDA [b"position", user.key(), user_margin_account.next_position_id.to_le_bytes()] init, payer = user
 amm_state              PDA [b"amm_state"]                 mut
-pyth_price_feed        Account<'info, PriceUpdateV2>      read-only
+pyth_price_feed        UncheckedAccount<'info>            read-only, manually deserialized
 system_program         Program<System>
 ```
 
@@ -313,7 +313,7 @@ user                   [signer]
 user_margin_account    PDA [b"margin", user.key()]    mut
 position               PDA [b"position", user.key(), position.position_id.to_le_bytes()] mut, close = user
 amm_state              PDA [b"amm_state"]              mut
-pyth_price_feed        Account<'info, PriceUpdateV2>
+pyth_price_feed        UncheckedAccount<'info>         manually deserialized
 ```
 
 **Logic:**
@@ -387,7 +387,7 @@ pyth_price_feed        Account<'info, PriceUpdateV2>
 **Accounts:**
 ```rust
 amm_state          PDA [b"amm_state"]    mut
-pyth_price_feed    Account<'info, PriceUpdateV2>
+pyth_price_feed    UncheckedAccount<'info>   manually deserialized
 clock              Sysvar<Clock>
 ```
 
@@ -432,7 +432,7 @@ position                PDA [b"position", position_owner.as_ref(), position_id.t
 amm_state               PDA [b"amm_state"]   mut
 vault                   Token account   mut
 vault_authority         PDA [b"vault_authority"]
-pyth_price_feed         Account<'info, PriceUpdateV2>
+pyth_price_feed         UncheckedAccount<'info>   manually deserialized
 token_program           Program<Token>
 clock                   Sysvar<Clock>
 ```
@@ -529,6 +529,9 @@ pub enum KonahrikError {
 ```
 
 ## 5. Pyth Oracle Integration
+
+> **Important:** The `pyth-solana-receiver-sdk` crate is incompatible with Anchor 1.0.1 due to borsh version conflicts (see [pyth-crosschain#3756](https://github.com/pyth-network/pyth-crosschain/issues/3756)). Instead, we manually deserialize the Pyth `PriceUpdateV2` account data without any external Pyth SDK dependency.
+
 ### 5.1 Cargo dependency
 
 ```toml
@@ -536,36 +539,74 @@ pub enum KonahrikError {
 [dependencies]
 anchor-lang = { version = "1.0.1", features = ["init-if-needed"] }
 anchor-spl  = "1.0.1"
-pyth-solana-receiver-sdk = "0.4.0"
+# No Pyth SDK needed - we deserialize manually
 
 [features]
 idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
 ```
+
 ### 5.2 Price reader helper (place in `src/oracle.rs`)
+
+The Pyth `PriceUpdateV2` account layout is well-documented and stable. We define the structs ourselves and deserialize from raw account bytes, skipping the 8-byte Anchor discriminator.
 
 ```rust
 use anchor_lang::prelude::*;
-use pyth_solana_receiver_sdk::price_update::{PriceUpdateV2, get_feed_id_from_hex};
 use crate::errors::KonahrikError;
 
-pub const SOL_USD_FEED_ID: &str =
-    "ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d";
-pub const STALENESS_THRESHOLD_SECS: u64 = 60;
+pub const STALENESS_THRESHOLD_SECS: i64 = 60;
 
-pub fn get_index_price(price_update: &Account<'_, PriceUpdateV2>) -> Result<u64> {
-    let feed_id = get_feed_id_from_hex(SOL_USD_FEED_ID)
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
+pub struct PriceFeedMessage {
+    pub feed_id: [u8; 32],
+    pub price: i64,
+    pub conf: u64,
+    pub exponent: i32,
+    pub publish_time: i64,
+    pub prev_publish_time: i64,
+    pub ema_price: i64,
+    pub ema_conf: u64,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
+pub enum VerificationLevel {
+    Partial { num_signatures: u8 },
+    Full,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
+pub struct PriceUpdateV2 {
+    pub write_authority: Pubkey,
+    pub verification_level: VerificationLevel,
+    pub price_message: PriceFeedMessage,
+    pub posted_slot: u64,
+}
+
+pub fn get_index_price(price_feed_info: &AccountInfo) -> Result<u64> {
+    let data = price_feed_info.try_borrow_data()?;
+
+    // Skip 8-byte Anchor discriminator
+    let mut data_slice: &[u8] = &data[8..];
+    let price_update = PriceUpdateV2::deserialize(&mut data_slice)
         .map_err(|_| error!(KonahrikError::OracleStaleness))?;
 
-    let price = price_update
-        .get_price_no_older_than(&Clock::get()?, STALENESS_THRESHOLD_SECS, &feed_id)
-        .map_err(|_| error!(KonahrikError::OracleStaleness))?;
+    let current_time = Clock::get()?.unix_timestamp;
+    let publish_time = price_update.price_message.publish_time;
 
     require!(
-        price.conf < price.price.unsigned_abs() / 100,
+        current_time - publish_time <= STALENESS_THRESHOLD_SECS,
+        KonahrikError::OracleStaleness
+    );
+
+    let price = price_update.price_message.price;
+    let conf = price_update.price_message.conf;
+    let exponent = price_update.price_message.exponent;
+
+    require!(
+        conf < price.unsigned_abs() / 100,
         KonahrikError::OracleConfidence
     );
 
-    let price_u64 = pyth_price_to_u64(price.price, price.exponent)?;
+    let price_u64 = pyth_price_to_u64(price, exponent)?;
     Ok(price_u64)
 }
 
@@ -586,6 +627,13 @@ fn pyth_price_to_u64(price: i64, exponent: i32) -> Result<u64> {
     }
 }
 ```
+
+**Key differences from SDK approach:**
+- Pyth price feed is passed as `UncheckedAccount<'info>` (not `Account<'info, PriceUpdateV2>`)
+- We manually `try_borrow_data()` and skip the 8-byte discriminator before deserializing
+- The `PriceUpdateV2` struct layout matches Pyth's on-chain format exactly
+- All instructions that read prices use `get_index_price(&ctx.accounts.pyth_price_feed.to_account_info())`
+
 ### 5.3 Devnet price feed account
 
 |**Feed**|**Devnet Address (sponsored - always fresh)**|
@@ -934,7 +982,7 @@ main();
 |Signer is owner of position|`close_position`|`require!(position.owner == user.key(), Unauthorized)`|
 |Vault authority is correct PDA|`withdraw_margin`, `liquidate`|`seeds = [b"vault_authority"], bump` on vault authority account|
 |Vault mint matches amm_state.usdc_mint|`deposit_margin`, `withdraw_margin`|`constraint = vault.mint == amm_state.usdc_mint`|
-|Oracle account is owned by Pyth program|All reads|`Account<'info, PriceUpdateV2>` enforces program ownership automatically|
+|Oracle account is valid Pyth feed|All reads|Manually deserialize `PriceUpdateV2` from `UncheckedAccount`, verify staleness and confidence|
 |Oracle not stale|`open_position`, `close_position`, `liquidate`|`get_price_no_older_than` with 60s threshold|
 |Leverage in bounds|`open_position`|`require!(leverage >= 1 && leverage <= 10)`|
 |All AMM math uses checked arithmetic|`open_position`, `close_position`, `liquidate`|`.checked_add`, `.checked_sub`, `.checked_mul`, `.checked_div` throughout|

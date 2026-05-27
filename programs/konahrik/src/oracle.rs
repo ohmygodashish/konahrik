@@ -1,26 +1,60 @@
 use anchor_lang::prelude::*;
-use pyth_solana_receiver_sdk::price_update::{get_feed_id_from_hex, PriceUpdateV2};
 
 use crate::errors::KonahrikError;
 
-pub const SOL_USD_FEED_ID: &str =
-    "ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d";
-pub const STALENESS_THRESHOLD_SECS: u64 = 60;
+pub const STALENESS_THRESHOLD_SECS: i64 = 60;
 
-pub fn get_index_price(price_update: &Account<'_, PriceUpdateV2>) -> Result<u64> {
-    let feed_id =
-        get_feed_id_from_hex(SOL_USD_FEED_ID).map_err(|_| error!(KonahrikError::OracleStaleness))?;
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
+pub struct PriceFeedMessage {
+    pub feed_id: [u8; 32],
+    pub price: i64,
+    pub conf: u64,
+    pub exponent: i32,
+    pub publish_time: i64,
+    pub prev_publish_time: i64,
+    pub ema_price: i64,
+    pub ema_conf: u64,
+}
 
-    let price = price_update
-        .get_price_no_older_than(&Clock::get()?, STALENESS_THRESHOLD_SECS, &feed_id)
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
+pub enum VerificationLevel {
+    Partial { num_signatures: u8 },
+    Full,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
+pub struct PriceUpdateV2 {
+    pub write_authority: Pubkey,
+    pub verification_level: VerificationLevel,
+    pub price_message: PriceFeedMessage,
+    pub posted_slot: u64,
+}
+
+pub fn get_index_price(price_feed_info: &AccountInfo) -> Result<u64> {
+    let data = price_feed_info.try_borrow_data()?;
+    
+    let mut data_slice: &[u8] = &data[8..];
+    let price_update = PriceUpdateV2::deserialize(&mut data_slice)
         .map_err(|_| error!(KonahrikError::OracleStaleness))?;
 
+    let current_time = Clock::get()?.unix_timestamp;
+    let publish_time = price_update.price_message.publish_time;
+
     require!(
-        price.conf < price.price.unsigned_abs() / 100,
+        current_time - publish_time <= STALENESS_THRESHOLD_SECS,
+        KonahrikError::OracleStaleness
+    );
+
+    let price = price_update.price_message.price;
+    let conf = price_update.price_message.conf;
+    let exponent = price_update.price_message.exponent;
+
+    require!(
+        conf < price.unsigned_abs() / 100,
         KonahrikError::OracleConfidence
     );
 
-    let price_u64 = pyth_price_to_u64(price.price, price.exponent)?;
+    let price_u64 = pyth_price_to_u64(price, exponent)?;
     Ok(price_u64)
 }
 
