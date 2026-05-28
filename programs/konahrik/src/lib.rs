@@ -26,4 +26,15 @@ pub mod konahrik {
     pub fn deposit_margin(ctx: Context<DepositMargin>, amount: u64) -> Result<()> {
         instructions::handle_deposit_margin(ctx, amount)
     }
+
+    pub fn open_position(
+        ctx: Context<OpenPosition>,
+        params: OpenPositionParams,
+    ) -> Result<()> {
+        instructions::handle_open_position(ctx, params)
+    }
+
+    pub fn close_position(ctx: Context<ClosePosition>) -> Result<()> {
+        instructions::handle_close_position(ctx)
+    }
 }
