@@ -823,4 +823,146 @@ describe("konahrik", () => {
       }
     });
   });
+
+  describe("withdraw_margin", () => {
+    const withdrawUser = Keypair.generate();
+    let withdrawUserUsdcAccount: PublicKey;
+    let withdrawUserMarginAccount: PublicKey;
+
+    before(async () => {
+      await provider.connection.confirmTransaction(
+        await provider.connection.requestAirdrop(withdrawUser.publicKey, 2_000_000_000)
+      );
+
+      withdrawUserUsdcAccount = await createAssociatedTokenAccount(
+        provider.connection,
+        (authority as any).payer,
+        usdcMint,
+        withdrawUser.publicKey,
+        { commitment: "confirmed" }
+      );
+
+      await mintTo(
+        provider.connection,
+        (authority as any).payer,
+        usdcMint,
+        withdrawUserUsdcAccount,
+        authority.publicKey,
+        500_000_000
+      );
+
+      [withdrawUserMarginAccount] = PublicKey.findProgramAddressSync(
+        [Buffer.from("margin"), withdrawUser.publicKey.toBuffer()],
+        program.programId
+      );
+
+      await program.methods
+        .depositMargin(new anchor.BN(200_000_000))
+        .accounts({
+          user: withdrawUser.publicKey,
+          userMarginAccount: withdrawUserMarginAccount,
+          ammState,
+          vault: vault.publicKey,
+          userUsdcAccount: withdrawUserUsdcAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([withdrawUser])
+        .rpc();
+    });
+
+    it("Withdraws margin successfully", async () => {
+      const withdrawAmount = new anchor.BN(50_000_000);
+
+      const vaultBefore = await getAccount(provider.connection, vault.publicKey);
+      const userUsdcBefore = await getAccount(provider.connection, withdrawUserUsdcAccount);
+
+      await program.methods
+        .withdrawMargin(withdrawAmount)
+        .accounts({
+          user: withdrawUser.publicKey,
+          userMarginAccount: withdrawUserMarginAccount,
+          userUsdcAccount: withdrawUserUsdcAccount,
+          vault: vault.publicKey,
+          vaultAuthority,
+          ammState,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([withdrawUser])
+        .rpc();
+
+      const vaultAfter = await getAccount(provider.connection, vault.publicKey);
+      const userUsdcAfter = await getAccount(provider.connection, withdrawUserUsdcAccount);
+      const marginAccount = await program.account.userMarginAccount.fetch(withdrawUserMarginAccount);
+
+      assert.equal(
+        Number(vaultBefore.amount - vaultAfter.amount),
+        withdrawAmount.toNumber()
+      );
+      assert.equal(
+        Number(userUsdcAfter.amount - userUsdcBefore.amount),
+        withdrawAmount.toNumber()
+      );
+
+      assert.ok(marginAccount.collateral.eq(new anchor.BN(150_000_000)));
+      assert.ok(marginAccount.freeCollateral.eq(new anchor.BN(150_000_000)));
+    });
+
+    it("Fails to withdraw more than free collateral", async () => {
+      const withdrawAmount = new anchor.BN(200_000_000);
+
+      try {
+        await program.methods
+          .withdrawMargin(withdrawAmount)
+          .accounts({
+            user: withdrawUser.publicKey,
+            userMarginAccount: withdrawUserMarginAccount,
+            userUsdcAccount: withdrawUserUsdcAccount,
+            vault: vault.publicKey,
+            vaultAuthority,
+            ammState,
+            tokenProgram: TOKEN_PROGRAM_ID,
+          })
+          .signers([withdrawUser])
+          .rpc();
+        assert.fail("Should have failed");
+      } catch (err) {
+        assert.include(err.toString(), "WithdrawalExceedsAvailable");
+      }
+    });
+
+    it("Fails to withdraw with wrong signer", async () => {
+      const wrongUser = Keypair.generate();
+      await provider.connection.confirmTransaction(
+        await provider.connection.requestAirdrop(wrongUser.publicKey, 1_000_000_000)
+      );
+
+      const wrongUserUsdcAccount = await createAssociatedTokenAccount(
+        provider.connection,
+        (authority as any).payer,
+        usdcMint,
+        wrongUser.publicKey,
+        { commitment: "confirmed" }
+      );
+
+      try {
+        await program.methods
+          .withdrawMargin(new anchor.BN(50_000_000))
+          .accounts({
+            user: wrongUser.publicKey,
+            userMarginAccount: withdrawUserMarginAccount,
+            userUsdcAccount: wrongUserUsdcAccount,
+            vault: vault.publicKey,
+            vaultAuthority,
+            ammState,
+            tokenProgram: TOKEN_PROGRAM_ID,
+          })
+          .signers([wrongUser])
+          .rpc();
+        assert.fail("Should have failed");
+      } catch (err) {
+        assert.include(err.toString(), "ConstraintSeeds");
+      }
+    });
+  });
 });
