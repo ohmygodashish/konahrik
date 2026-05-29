@@ -91,7 +91,7 @@ pub fn handle_open_position(ctx: Context<OpenPosition>, params: OpenPositionPara
     let amm_state = &mut ctx.accounts.amm_state;
     let notional_u128 = notional as u128;
 
-    let (new_base, base_acquired) = if params.is_long {
+    let (new_base, new_quote, base_acquired) = if params.is_long {
         let new_quote = amm_state
             .quote_asset_reserve
             .checked_add(notional_u128)
@@ -108,7 +108,7 @@ pub fn handle_open_position(ctx: Context<OpenPosition>, params: OpenPositionPara
             base_acquired as u64 >= params.min_base_amount,
             KonahrikError::SlippageExceeded
         );
-        (new_base, base_acquired)
+        (new_base, new_quote, base_acquired)
     } else {
         require!(
             notional_u128 < amm_state.quote_asset_reserve,
@@ -129,14 +129,11 @@ pub fn handle_open_position(ctx: Context<OpenPosition>, params: OpenPositionPara
             base_released as u64 >= params.min_base_amount,
             KonahrikError::SlippageExceeded
         );
-        (new_base, base_released)
+        (new_base, new_quote, base_released)
     };
 
     amm_state.base_asset_reserve = new_base;
-    amm_state.quote_asset_reserve = amm_state
-        .k
-        .checked_div(new_base)
-        .ok_or(KonahrikError::MathOverflow)?;
+    amm_state.quote_asset_reserve = new_quote;
 
     if params.is_long {
         amm_state.open_interest_long = amm_state

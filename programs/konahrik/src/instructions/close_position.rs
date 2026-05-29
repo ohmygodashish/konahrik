@@ -71,7 +71,7 @@ pub fn handle_close_position(ctx: Context<ClosePosition>) -> Result<()> {
     let amm_state = &mut ctx.accounts.amm_state;
     let position_size_u128 = position.size as u128;
 
-    let (new_base, quote_received, quote_paid) = if position.is_long {
+    let (new_base, new_quote, quote_received, quote_paid) = if position.is_long {
         let new_base = amm_state
             .base_asset_reserve
             .checked_add(position_size_u128)
@@ -84,7 +84,7 @@ pub fn handle_close_position(ctx: Context<ClosePosition>) -> Result<()> {
             .quote_asset_reserve
             .checked_sub(new_quote)
             .ok_or(KonahrikError::MathOverflow)?;
-        (new_base, quote_received as i64, 0i64)
+        (new_base, new_quote, quote_received as i64, 0i64)
     } else {
         let new_base = amm_state
             .base_asset_reserve
@@ -97,7 +97,7 @@ pub fn handle_close_position(ctx: Context<ClosePosition>) -> Result<()> {
         let quote_paid = new_quote
             .checked_sub(amm_state.quote_asset_reserve)
             .ok_or(KonahrikError::MathOverflow)?;
-        (new_base, 0i64, quote_paid as i64)
+        (new_base, new_quote, 0i64, quote_paid as i64)
     };
 
     let realized_pnl = if position.is_long {
@@ -128,10 +128,7 @@ pub fn handle_close_position(ctx: Context<ClosePosition>) -> Result<()> {
         .max(0) as u64;
 
     amm_state.base_asset_reserve = new_base;
-    amm_state.quote_asset_reserve = amm_state
-        .k
-        .checked_div(new_base)
-        .ok_or(KonahrikError::MathOverflow)?;
+    amm_state.quote_asset_reserve = new_quote;
 
     if position.is_long {
         amm_state.open_interest_long = amm_state
