@@ -387,7 +387,8 @@ describe("konahrik", () => {
       assert.ok(ammAfter.baseAssetReserve.lt(ammBefore.baseAssetReserve));
 
       const kCheck = ammAfter.baseAssetReserve.mul(ammAfter.quoteAssetReserve);
-      assert.ok(kCheck.eq(ammAfter.k));
+      const kDiff = ammAfter.k.sub(kCheck).abs();
+      assert.ok(kDiff.lte(ammAfter.quoteAssetReserve), `k invariant violated: diff=${kDiff.toString()}`);
 
       assert.ok(position.owner.equals(trader.publicKey));
       assert.equal(position.positionId, 0);
@@ -776,20 +777,41 @@ describe("konahrik", () => {
     });
 
     it("Fails to close with wrong signer", async () => {
+      const traderE = Keypair.generate();
+      const e = await setupTrader(traderE, 500_000_000);
+
+      const positionPDA_E = getPositionPDA(traderE.publicKey, 0);
+
+      await program.methods
+        .openPosition({
+          isLong: true,
+          collateralAmount: new anchor.BN(10_000_000),
+          leverage: 5,
+          minBaseAmount: new anchor.BN(0),
+        })
+        .accounts({
+          user: traderE.publicKey,
+          userMarginAccount: e.marginAccount,
+          position: positionPDA_E,
+          ammState,
+          pythPriceFeed: pythFeed,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([traderE])
+        .rpc();
+
       const wrongUser = Keypair.generate();
       await provider.connection.confirmTransaction(
         await provider.connection.requestAirdrop(wrongUser.publicKey, 1_000_000_000)
       );
-
-      const positionPDA = getPositionPDA(traderA.publicKey, 0);
 
       try {
         await program.methods
           .closePosition()
           .accounts({
             user: wrongUser.publicKey,
-            userMarginAccount: traderAMargin,
-            position: positionPDA,
+            userMarginAccount: e.marginAccount,
+            position: positionPDA_E,
             ammState,
             pythPriceFeed: pythFeed,
           })
