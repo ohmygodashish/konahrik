@@ -293,4 +293,512 @@ describe("konahrik", () => {
       }
     });
   });
+
+  describe("open_position", () => {
+    const trader = Keypair.generate();
+    let traderUsdcAccount: PublicKey;
+    let traderMarginAccount: PublicKey;
+
+    function getPositionPDA(user: PublicKey, positionId: number): PublicKey {
+      const buf = Buffer.alloc(4);
+      buf.writeUInt32LE(positionId, 0);
+      const [pda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("position"), user.toBuffer(), buf],
+        program.programId
+      );
+      return pda;
+    }
+
+    before(async () => {
+      await provider.connection.confirmTransaction(
+        await provider.connection.requestAirdrop(trader.publicKey, 2_000_000_000)
+      );
+
+      traderUsdcAccount = await createAssociatedTokenAccount(
+        provider.connection,
+        (authority as any).payer,
+        usdcMint,
+        trader.publicKey,
+        { commitment: "confirmed" }
+      );
+
+      await mintTo(
+        provider.connection,
+        (authority as any).payer,
+        usdcMint,
+        traderUsdcAccount,
+        authority.publicKey,
+        1_000_000_000
+      );
+
+      [traderMarginAccount] = PublicKey.findProgramAddressSync(
+        [Buffer.from("margin"), trader.publicKey.toBuffer()],
+        program.programId
+      );
+
+      await program.methods
+        .depositMargin(new anchor.BN(500_000_000))
+        .accounts({
+          user: trader.publicKey,
+          userMarginAccount: traderMarginAccount,
+          ammState,
+          vault: vault.publicKey,
+          userUsdcAccount: traderUsdcAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([trader])
+        .rpc();
+    });
+
+    it("Opens LONG position with 10x leverage", async () => {
+      const collateralAmount = new anchor.BN(10_000_000);
+      const leverage = 10;
+      const minBaseAmount = new anchor.BN(0);
+
+      const ammBefore = await program.account.ammState.fetch(ammState);
+      const marginBefore = await program.account.userMarginAccount.fetch(traderMarginAccount);
+
+      const positionPDA = getPositionPDA(trader.publicKey, 0);
+
+      await program.methods
+        .openPosition({
+          isLong: true,
+          collateralAmount,
+          leverage,
+          minBaseAmount,
+        })
+        .accounts({
+          user: trader.publicKey,
+          userMarginAccount: traderMarginAccount,
+          position: positionPDA,
+          ammState,
+          pythPriceFeed: pythFeed,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([trader])
+        .rpc();
+
+      const ammAfter = await program.account.ammState.fetch(ammState);
+      const marginAfter = await program.account.userMarginAccount.fetch(traderMarginAccount);
+      const position = await program.account.position.fetch(positionPDA);
+
+      assert.ok(ammAfter.quoteAssetReserve.gt(ammBefore.quoteAssetReserve));
+      assert.ok(ammAfter.baseAssetReserve.lt(ammBefore.baseAssetReserve));
+
+      const kCheck = ammAfter.baseAssetReserve.mul(ammAfter.quoteAssetReserve);
+      assert.ok(kCheck.eq(ammAfter.k));
+
+      assert.ok(position.owner.equals(trader.publicKey));
+      assert.equal(position.positionId, 0);
+      assert.equal(position.isLong, true);
+      assert.ok(position.size.gt(new anchor.BN(0)));
+      assert.ok(position.notional.eq(new anchor.BN(100_000_000)));
+      assert.ok(position.entryPrice.gt(new anchor.BN(0)));
+
+      const expectedMargin = collateralAmount.sub(
+        collateralAmount.mul(new anchor.BN(leverage)).mul(new anchor.BN(10)).div(new anchor.BN(10_000))
+      );
+      assert.ok(position.margin.eq(expectedMargin));
+
+      assert.ok(position.fundingSnapshot.eq(new anchor.BN(0)));
+
+      assert.ok(marginAfter.freeCollateral.lt(marginBefore.freeCollateral));
+      assert.ok(
+        marginBefore.freeCollateral.sub(marginAfter.freeCollateral).eq(collateralAmount)
+      );
+
+      assert.equal(marginAfter.nextPositionId, 1);
+
+      assert.ok(ammAfter.openInterestLong.eq(new anchor.BN(100_000_000)));
+    });
+
+    it("Opens SHORT position", async () => {
+      const collateralAmount = new anchor.BN(5_000_000);
+      const leverage = 5;
+      const minBaseAmount = new anchor.BN(0);
+
+      const ammBefore = await program.account.ammState.fetch(ammState);
+
+      const positionPDA = getPositionPDA(trader.publicKey, 1);
+
+      await program.methods
+        .openPosition({
+          isLong: false,
+          collateralAmount,
+          leverage,
+          minBaseAmount,
+        })
+        .accounts({
+          user: trader.publicKey,
+          userMarginAccount: traderMarginAccount,
+          position: positionPDA,
+          ammState,
+          pythPriceFeed: pythFeed,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([trader])
+        .rpc();
+
+      const ammAfter = await program.account.ammState.fetch(ammState);
+      const position = await program.account.position.fetch(positionPDA);
+
+      assert.ok(ammAfter.quoteAssetReserve.lt(ammBefore.quoteAssetReserve));
+      assert.ok(ammAfter.baseAssetReserve.gt(ammBefore.baseAssetReserve));
+
+      assert.equal(position.isLong, false);
+      assert.equal(position.positionId, 1);
+      assert.ok(position.notional.eq(new anchor.BN(25_000_000)));
+
+      const marginAfter = await program.account.userMarginAccount.fetch(traderMarginAccount);
+      assert.equal(marginAfter.nextPositionId, 2);
+
+      assert.ok(ammAfter.openInterestShort.eq(new anchor.BN(25_000_000)));
+    });
+
+    it("Fails with leverage > 10", async () => {
+      const positionPDA = getPositionPDA(trader.publicKey, 2);
+
+      try {
+        await program.methods
+          .openPosition({
+            isLong: true,
+            collateralAmount: new anchor.BN(10_000_000),
+            leverage: 11,
+            minBaseAmount: new anchor.BN(0),
+          })
+          .accounts({
+            user: trader.publicKey,
+            userMarginAccount: traderMarginAccount,
+            position: positionPDA,
+            ammState,
+            pythPriceFeed: pythFeed,
+            systemProgram: SystemProgram.programId,
+          })
+          .signers([trader])
+          .rpc();
+        assert.fail("Should have failed");
+      } catch (err) {
+        assert.include(err.toString(), "InvalidLeverage");
+      }
+    });
+
+    it("Fails with leverage = 0", async () => {
+      const positionPDA = getPositionPDA(trader.publicKey, 2);
+
+      try {
+        await program.methods
+          .openPosition({
+            isLong: true,
+            collateralAmount: new anchor.BN(10_000_000),
+            leverage: 0,
+            minBaseAmount: new anchor.BN(0),
+          })
+          .accounts({
+            user: trader.publicKey,
+            userMarginAccount: traderMarginAccount,
+            position: positionPDA,
+            ammState,
+            pythPriceFeed: pythFeed,
+            systemProgram: SystemProgram.programId,
+          })
+          .signers([trader])
+          .rpc();
+        assert.fail("Should have failed");
+      } catch (err) {
+        assert.include(err.toString(), "InvalidLeverage");
+      }
+    });
+
+    it("Fails with insufficient margin", async () => {
+      const marginAccount = await program.account.userMarginAccount.fetch(traderMarginAccount);
+      const tooMuch = marginAccount.freeCollateral.add(new anchor.BN(1));
+      const positionPDA = getPositionPDA(trader.publicKey, 2);
+
+      try {
+        await program.methods
+          .openPosition({
+            isLong: true,
+            collateralAmount: tooMuch,
+            leverage: 1,
+            minBaseAmount: new anchor.BN(0),
+          })
+          .accounts({
+            user: trader.publicKey,
+            userMarginAccount: traderMarginAccount,
+            position: positionPDA,
+            ammState,
+            pythPriceFeed: pythFeed,
+            systemProgram: SystemProgram.programId,
+          })
+          .signers([trader])
+          .rpc();
+        assert.fail("Should have failed");
+      } catch (err) {
+        assert.include(err.toString(), "InsufficientMargin");
+      }
+    });
+
+    it("Fails with slippage exceeded", async () => {
+      const positionPDA = getPositionPDA(trader.publicKey, 2);
+
+      try {
+        await program.methods
+          .openPosition({
+            isLong: true,
+            collateralAmount: new anchor.BN(10_000_000),
+            leverage: 1,
+            minBaseAmount: new anchor.BN("999999999999999"),
+          })
+          .accounts({
+            user: trader.publicKey,
+            userMarginAccount: traderMarginAccount,
+            position: positionPDA,
+            ammState,
+            pythPriceFeed: pythFeed,
+            systemProgram: SystemProgram.programId,
+          })
+          .signers([trader])
+          .rpc();
+        assert.fail("Should have failed");
+      } catch (err) {
+        assert.include(err.toString(), "SlippageExceeded");
+      }
+    });
+  });
+
+  describe("close_position", () => {
+    const traderA = Keypair.generate();
+    const traderB = Keypair.generate();
+    let traderAUsdc: PublicKey;
+    let traderBUsdc: PublicKey;
+    let traderAMargin: PublicKey;
+    let traderBMargin: PublicKey;
+
+    function getPositionPDA(user: PublicKey, positionId: number): PublicKey {
+      const buf = Buffer.alloc(4);
+      buf.writeUInt32LE(positionId, 0);
+      const [pda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("position"), user.toBuffer(), buf],
+        program.programId
+      );
+      return pda;
+    }
+
+    async function setupTrader(keypair: Keypair, usdcAmount: number): Promise<{ usdcAccount: PublicKey; marginAccount: PublicKey }> {
+      await provider.connection.confirmTransaction(
+        await provider.connection.requestAirdrop(keypair.publicKey, 2_000_000_000)
+      );
+
+      const usdcAccount = await createAssociatedTokenAccount(
+        provider.connection,
+        (authority as any).payer,
+        usdcMint,
+        keypair.publicKey,
+        { commitment: "confirmed" }
+      );
+
+      await mintTo(
+        provider.connection,
+        (authority as any).payer,
+        usdcMint,
+        usdcAccount,
+        authority.publicKey,
+        usdcAmount
+      );
+
+      const [marginAccount] = PublicKey.findProgramAddressSync(
+        [Buffer.from("margin"), keypair.publicKey.toBuffer()],
+        program.programId
+      );
+
+      await program.methods
+        .depositMargin(new anchor.BN(usdcAmount))
+        .accounts({
+          user: keypair.publicKey,
+          userMarginAccount: marginAccount,
+          ammState,
+          vault: vault.publicKey,
+          userUsdcAccount: usdcAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([keypair])
+        .rpc();
+
+      return { usdcAccount, marginAccount };
+    }
+
+    before(async () => {
+      const a = await setupTrader(traderA, 1_000_000_000);
+      traderAUsdc = a.usdcAccount;
+      traderAMargin = a.marginAccount;
+
+      const b = await setupTrader(traderB, 1_000_000_000);
+      traderBUsdc = b.usdcAccount;
+      traderBMargin = b.marginAccount;
+    });
+
+    it("Closes LONG position with profit", async () => {
+      const positionPDA_A = getPositionPDA(traderA.publicKey, 0);
+
+      await program.methods
+        .openPosition({
+          isLong: true,
+          collateralAmount: new anchor.BN(10_000_000),
+          leverage: 10,
+          minBaseAmount: new anchor.BN(0),
+        })
+        .accounts({
+          user: traderA.publicKey,
+          userMarginAccount: traderAMargin,
+          position: positionPDA_A,
+          ammState,
+          pythPriceFeed: pythFeed,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([traderA])
+        .rpc();
+
+      const positionPDA_B = getPositionPDA(traderB.publicKey, 0);
+
+      await program.methods
+        .openPosition({
+          isLong: true,
+          collateralAmount: new anchor.BN(50_000_000),
+          leverage: 10,
+          minBaseAmount: new anchor.BN(0),
+        })
+        .accounts({
+          user: traderB.publicKey,
+          userMarginAccount: traderBMargin,
+          position: positionPDA_B,
+          ammState,
+          pythPriceFeed: pythFeed,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([traderB])
+        .rpc();
+
+      const marginBefore = await program.account.userMarginAccount.fetch(traderAMargin);
+
+      await program.methods
+        .closePosition()
+        .accounts({
+          user: traderA.publicKey,
+          userMarginAccount: traderAMargin,
+          position: positionPDA_A,
+          ammState,
+          pythPriceFeed: pythFeed,
+        })
+        .signers([traderA])
+        .rpc();
+
+      const marginAfter = await program.account.userMarginAccount.fetch(traderAMargin);
+
+      assert.ok(marginAfter.freeCollateral.gt(marginBefore.freeCollateral));
+
+      try {
+        await program.account.position.fetch(positionPDA_A);
+        assert.fail("Position should be closed");
+      } catch (err) {
+        assert.include(err.toString(), "does not exist");
+      }
+    });
+
+    it("Closes LONG position with loss", async () => {
+      const traderC = Keypair.generate();
+      const traderD = Keypair.generate();
+      const c = await setupTrader(traderC, 1_000_000_000);
+      const d = await setupTrader(traderD, 1_000_000_000);
+
+      const positionPDA_C = getPositionPDA(traderC.publicKey, 0);
+
+      await program.methods
+        .openPosition({
+          isLong: true,
+          collateralAmount: new anchor.BN(10_000_000),
+          leverage: 5,
+          minBaseAmount: new anchor.BN(0),
+        })
+        .accounts({
+          user: traderC.publicKey,
+          userMarginAccount: c.marginAccount,
+          position: positionPDA_C,
+          ammState,
+          pythPriceFeed: pythFeed,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([traderC])
+        .rpc();
+
+      const positionPDA_D = getPositionPDA(traderD.publicKey, 0);
+
+      await program.methods
+        .openPosition({
+          isLong: false,
+          collateralAmount: new anchor.BN(100_000_000),
+          leverage: 5,
+          minBaseAmount: new anchor.BN(0),
+        })
+        .accounts({
+          user: traderD.publicKey,
+          userMarginAccount: d.marginAccount,
+          position: positionPDA_D,
+          ammState,
+          pythPriceFeed: pythFeed,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([traderD])
+        .rpc();
+
+      const marginBefore = await program.account.userMarginAccount.fetch(c.marginAccount);
+      const freeCollateralBefore = marginBefore.freeCollateral;
+
+      await program.methods
+        .closePosition()
+        .accounts({
+          user: traderC.publicKey,
+          userMarginAccount: c.marginAccount,
+          position: positionPDA_C,
+          ammState,
+          pythPriceFeed: pythFeed,
+        })
+        .signers([traderC])
+        .rpc();
+
+      const marginAfter = await program.account.userMarginAccount.fetch(c.marginAccount);
+
+      assert.ok(
+        marginAfter.freeCollateral.lt(freeCollateralBefore.add(new anchor.BN(10_000_000))),
+        "Free collateral should be less than original margin (loss scenario)"
+      );
+    });
+
+    it("Fails to close with wrong signer", async () => {
+      const wrongUser = Keypair.generate();
+      await provider.connection.confirmTransaction(
+        await provider.connection.requestAirdrop(wrongUser.publicKey, 1_000_000_000)
+      );
+
+      const positionPDA = getPositionPDA(traderA.publicKey, 0);
+
+      try {
+        await program.methods
+          .closePosition()
+          .accounts({
+            user: wrongUser.publicKey,
+            userMarginAccount: traderAMargin,
+            position: positionPDA,
+            ammState,
+            pythPriceFeed: pythFeed,
+          })
+          .signers([wrongUser])
+          .rpc();
+        assert.fail("Should have failed");
+      } catch (err) {
+        assert.include(err.toString(), "ConstraintSeeds");
+      }
+    });
+  });
 });
