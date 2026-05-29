@@ -37,4 +37,8 @@ pub mod konahrik {
     pub fn close_position(ctx: Context<ClosePosition>) -> Result<()> {
         instructions::handle_close_position(ctx)
     }
+
+    pub fn withdraw_margin(ctx: Context<WithdrawMargin>, amount: u64) -> Result<()> {
+        instructions::handle_withdraw_margin(ctx, amount)
+    }
 }
