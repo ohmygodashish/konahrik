@@ -641,6 +641,19 @@ fn pyth_price_to_u64(price: i64, exponent: i32) -> Result<u64> {
 |SOL/USD|`7UVimffxr9ow1uXYxsr4LHAcV58mLzhmwaeKvJ1pjLiE`|
 Pass this address as `pyth_price_feed` in all instruction calls. No manual Hermes posting needed on devnet.
 
+### 5.4 Frontend Price Display
+
+The on-chain program uses Pyth oracle for liquidation checks (security-critical). The frontend displays a live index price using Binance's public API for user reference.
+
+**Rationale:** Pyth Hermes API had authentication issues during development. Binance provides free, reliable SOL/USDT prices without API keys.
+
+**Implementation:** `app/src/lib/price-client.ts` fetches from:
+```
+https://api.binance.com/api/v3/ticker/price?symbol=SOLUSDT
+```
+
+The frontend polls this endpoint every 3 seconds to display the index price alongside the vAMM mark price.
+
 ## 6. Repository Structure
 
 ```markdown
@@ -666,6 +679,9 @@ konahrik/
 │               └── withdraw_margin.rs
 ├── tests/
 │   └── konahrik.ts
+├── scripts/
+│   ├── init.ts              ← AMM initialization (required, run once after deploy)
+│   └── faucet.ts            ← Test USDC distribution (convenience script)
 └── app/                            <- Next.js frontend
     ├── package.json
     ├── next.config.js
@@ -683,7 +699,7 @@ konahrik/
         └── lib/
             ├── constants.ts            ← PROGRAM_ID, feed addresses, demo params
             ├── anchor-client.ts        ← provider, program, PDA helpers
-            ├── pyth-client.ts          ← Hermes REST for live price display
+            ├── price-client.ts         ← Binance REST for live price display
             └── math.ts                 ← client-side liq price + PnL calculations
 ```
 
@@ -709,7 +725,7 @@ seeds = false
 skip-lint = false
 
 [programs.devnet]
-konahrik = "PLACEHOLDER_UPDATE_AFTER_ANCHOR_BUILD"
+konahrik = "9HBoParaQQoyCRDEgq3REHkrqtnuwc3hVhQ3C7VDBJyk"
 
 [provider]
 cluster = "devnet"
@@ -756,8 +772,9 @@ module.exports = nextConfig;
 ```typescript
 import { PublicKey } from "@solana/web3.js";
 
-export const PROGRAM_ID        = new PublicKey("PLACEHOLDER");
-export const PYTH_SOL_USD_FEED = new PublicKey("7UVimffxr9ow1uXYxsr4LHAcV58mLzhmwaeKvJ1pjLiE");
+export const PROGRAM_ID        = new PublicKey("9HBoParaQQoyCRDEgq3REHkrqtnuwc3hVhQ3C7VDBJyk");
+export const USDC_MINT         = new PublicKey("7A8362V94zwLvUiCHaVU2cCqhcM3hg3q5Gnu9JypoUiR");
+export const BINANCE_API_URL   = "https://api.binance.com/api/v3/ticker/price";
 export const DEVNET_RPC        = "https://api.devnet.solana.com";
 
 // Demo AMM initial params (must match what initialize_amm was called with)
@@ -804,7 +821,13 @@ export const getVaultAuthorityPDA = () =>
 export const SCALE = 1_000_000n; // 1e6
 
 export function getMarkPrice(baseReserve: bigint, quoteReserve: bigint): number {
-  return Number((quoteReserve * SCALE) / baseReserve) / 1_000_000;
+  if (baseReserve === 0n) return 0;
+  // Account for decimal difference: SOL (1e9) vs USDC (1e6)
+  // price = (quoteReserve / 1e6) / (baseReserve / 1e9)
+  //       = (quoteReserve * 1e9) / (baseReserve * 1e6)
+  //       = (quoteReserve * 1000) / baseReserve
+  // Multiply by 1e6 for decimal precision
+  return Number((quoteReserve * 1000n * 1000000n) / baseReserve) / 1_000_000;
 }
 
 export function getLiquidationPrice(
@@ -836,6 +859,46 @@ export function getMarginRatio(
   notionalUsdc: number
 ): number {
   return (marginUsdc + unrealizedPnl) / notionalUsdc;
+}
+```
+
+### `app/src/lib/price-client.ts` (Binance API for live index price)
+```typescript
+import { BINANCE_API_URL } from "./constants";
+
+export interface PriceData {
+  price: number;
+  timestamp: number;
+}
+
+// Fetches live SOL/USDT price from Binance public API
+export async function getIndexPrice(): Promise<PriceData | null> {
+  try {
+    const response = await fetch(`${BINANCE_API_URL}?symbol=SOLUSDT`);
+    
+    if (!response.ok) {
+      throw new Error(`Binance API error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    if (!data || !data.price) {
+      return null;
+    }
+    
+    return {
+      price: parseFloat(data.price),
+      timestamp: Date.now(),
+    };
+  } catch (error) {
+    console.error("Failed to fetch index price:", error);
+    return null;
+  }
+}
+
+export function formatPrice(priceData: PriceData | null): string {
+  if (!priceData) return "---";
+  return priceData.price.toFixed(2);
 }
 ```
 
@@ -896,26 +959,47 @@ describe("Konahrik MVP", () => {
 Run once after deployment to set up the AMM.
 
 ```typescript
-import * as anchor from "@anchor-lang/core";
-import { getProgram, getAmmStatePDA, getVaultAuthorityPDA } from "../app/src/lib/anchor-client";
-import { TOKEN_PROGRAM_ID, createMint, getOrCreateAssociatedTokenAccount } from "@solana/spl-token";
-import { DEVNET_RPC, PYTH_SOL_USD_FEED } from "../app/src/lib/constants";
+import * as anchor from "@coral-xyz/anchor";
+import {
+  createMint,
+  createAssociatedTokenAccount,
+  mintTo,
+  TOKEN_PROGRAM_ID,
+} from "@solana/spl-token";
+import { PublicKey, Keypair } from "@solana/web3.js";
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
+
+const DEVNET_RPC = "https://api.devnet.solana.com";
+const PYTH_SOL_USD_FEED = new PublicKey(
+  "7UVimffxr9ow1uXYxsr4LHAcV58mLzhmwaeKvJ1pjLiE"
+);
 
 async function main() {
-  const provider = anchor.AnchorProvider.env();
-  anchor.setProvider(provider);
-  const program = anchor.workspace.Konahrik as anchor.Program;
+  // 1. Load wallet from ~/.config/solana/id.json
+  // 2. Connect to devnet
+  // 3. Load program IDL from target/idl/konahrik.json
   
-  // On devnet, use a real USDC devnet mint OR create a test mint
-  // Real devnet USDC: EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v (mainnet)
-  // For demo: create a local test mint so you can airdrop freely
-  const usdcMint = await createMint(provider.connection, provider.wallet.payer, /*...*/);
-  const [ammStatePDA] = getAmmStatePDA();
-  const [vaultAuthority] = getVaultAuthorityPDA();
+  // 4. Create new USDC mint (6 decimals, deployer as mint authority)
+  const usdcMint = await createMint(/* ... */);
   
-  // Create vault token account
-  const vault = await getOrCreateAssociatedTokenAccount(/*...*/);
-
+  // 5. Create deployer's USDC account and mint 10M USDC
+  const deployerUsdcAccount = await createAssociatedTokenAccount(/* ... */);
+  await mintTo(/* ... */, 10_000_000 * 1_000_000);
+  
+  // 6. Derive PDAs
+  const [ammStatePDA] = PublicKey.findProgramAddressSync(
+    [Buffer.from("amm_state")], programId
+  );
+  const [vaultAuthorityPDA] = PublicKey.findProgramAddressSync(
+    [Buffer.from("vault_authority")], programId
+  );
+  
+  // 7. Generate vault keypair (program will create the token account)
+  const vaultKeypair = Keypair.generate();
+  
+  // 8. Initialize AMM
   await program.methods
     .initializeAmm({
       initialBaseReserve: new anchor.BN("1000000000000000"),   // 1M SOL * 1e9
@@ -927,23 +1011,34 @@ async function main() {
       fundingPeriod: new anchor.BN(3600),
     })
     .accounts({
-      authority: provider.wallet.publicKey,
+      authority: walletKeypair.publicKey,
       ammState: ammStatePDA,
-      vault: vault.address,
-      vaultAuthority,
-      usdcMint,
+      vault: vaultKeypair.publicKey,
+      vaultAuthority: vaultAuthorityPDA,
+      usdcMint: usdcMint,
       pythFeed: PYTH_SOL_USD_FEED,
       tokenProgram: TOKEN_PROGRAM_ID,
       systemProgram: anchor.web3.SystemProgram.programId,
       rent: anchor.web3.SYSVAR_RENT_PUBKEY,
     })
+    .signers([vaultKeypair])
     .rpc();
-
-  console.log("AMM initialized. AmmState:", ammStatePDA.toBase58());
+  
+  // 9. Print summary with USDC mint address
+  console.log(`USDC Mint: ${usdcMint.toBase58()}`);
+  console.log("Copy this to app/src/lib/constants.ts → USDC_MINT");
 }
 
 main();
 ```
+
+**Important notes:**
+- Creates a new USDC mint (not using existing devnet USDC)
+- Generates vault keypair (not ATA)
+- Mints 10M test USDC to deployer wallet
+- Prints USDC mint address for frontend configuration
+- Run once after deployment. Re-running will fail (AmmState PDA already exists)
+- After running, copy the USDC mint address to `app/src/lib/constants.ts`
 
 ## 12. Day-by-Day Build Plan
 ### Day 1
@@ -965,6 +1060,8 @@ main();
 - [ ] Set up Next.js app with wallet adapter
 - [ ] Build `AmmStats` component polling `AmmState` on-chain
 - [ ] Build `MarginPanel` (deposit flow)
+
+**Note:** Frontend uses Binance API for live index price display instead of Pyth Hermes API due to authentication issues. On-chain program still uses Pyth oracle for liquidation checks.
 ### Day 4
 - [ ] Build `TradingPanel` (open position flow with live entry price preview)
 - [ ] Build `PositionCard` (live unrealized PnL, liquidation price)
@@ -1003,3 +1100,29 @@ The following must not be scaffolded. They are listed here so the agent does not
 - Insurance fund withdrawal mechanism
 - On-chain price history storage
 - WebSocket subscriptions in the frontend (polling every 3s is sufficient for demo)
+
+## 15. Devnet Deployment Reference
+
+After running `scripts/init.ts`, the following addresses are created:
+
+| Resource | Address |
+|----------|---------|
+| Program ID | `9HBoParaQQoyCRDEgq3REHkrqtnuwc3hVhQ3C7VDBJyk` |
+| USDC Mint | `7A8362V94zwLvUiCHaVU2cCqhcM3hg3q5Gnu9JypoUiR` |
+| AMM State PDA | `DrXHa48LDLQTgfJpoYWNy2mu9KMy1h3EHJHaYzQZvhsK` |
+| Vault | `HJB7Co2HHUyZFuKs3DFAxa9kCvHBK79zJqFnh8zXxp7L` |
+| Vault Authority PDA | `FuoPCKbg32HHWABX3hqkxvNo5QSfXfBaqdDghU8cQGyy` |
+
+**Test USDC Distribution:**
+- Deployer wallet holds 10M test USDC (mint authority)
+- Use `scripts/faucet.ts` to distribute test USDC to other wallets
+- Alternative: `spl-token transfer <MINT> <AMOUNT> <WALLET> --url devnet --fund-recipient`
+
+**Checking Balances:**
+```bash
+# Check USDC balance for a wallet
+spl-token balance <MINT_ADDRESS> --owner <WALLET_ADDRESS> --url devnet
+
+# Check SOL balance
+solana balance <WALLET_ADDRESS> --url devnet
+```
