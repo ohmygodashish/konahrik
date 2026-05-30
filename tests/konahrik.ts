@@ -58,7 +58,7 @@ describe("konahrik", () => {
       const maintMarginBps = 625;
       const liquidationFeeBps = 250;
       const tradingFeeBps = 10;
-      const fundingPeriod = new anchor.BN(3600);
+      const fundingPeriod = new anchor.BN(2);
 
       await program.methods
         .initializeAmm({
@@ -127,7 +127,7 @@ describe("konahrik", () => {
             maintMarginBps: 625,
             liquidationFeeBps: 250,
             tradingFeeBps: 10,
-            fundingPeriod: new anchor.BN(3600),
+            fundingPeriod: new anchor.BN(2),
           })
           .accounts({
             authority: authority.publicKey,
@@ -963,6 +963,247 @@ describe("konahrik", () => {
       } catch (err) {
         assert.include(err.toString(), "ConstraintSeeds");
       }
+    });
+  });
+
+  describe("update_funding", () => {
+    const fundingTrader = Keypair.generate();
+    let fundingTraderUsdc: PublicKey;
+    let fundingTraderMargin: PublicKey;
+
+    before(async () => {
+      await provider.connection.confirmTransaction(
+        await provider.connection.requestAirdrop(fundingTrader.publicKey, 2_000_000_000)
+      );
+
+      fundingTraderUsdc = await createAssociatedTokenAccount(
+        provider.connection,
+        (authority as any).payer,
+        usdcMint,
+        fundingTrader.publicKey,
+        { commitment: "confirmed" }
+      );
+
+      await mintTo(
+        provider.connection,
+        (authority as any).payer,
+        usdcMint,
+        fundingTraderUsdc,
+        authority.publicKey,
+        1_000_000_000
+      );
+
+      [fundingTraderMargin] = PublicKey.findProgramAddressSync(
+        [Buffer.from("margin"), fundingTrader.publicKey.toBuffer()],
+        program.programId
+      );
+
+      await program.methods
+        .depositMargin(new anchor.BN(500_000_000))
+        .accounts({
+          user: fundingTrader.publicKey,
+          userMarginAccount: fundingTraderMargin,
+          ammState,
+          vault: vault.publicKey,
+          userUsdcAccount: fundingTraderUsdc,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([fundingTrader])
+        .rpc();
+    });
+
+    async function updateFundingWhenDue() {
+      for (let attempt = 0; attempt < 10; attempt++) {
+        try {
+          await program.methods
+            .updateFunding()
+            .accounts({
+              ammState,
+              pythPriceFeed: pythFeed,
+            })
+            .rpc();
+          return;
+        } catch (err) {
+          if (!err.toString().includes("FundingNotDue") || attempt === 9) {
+            throw err;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
+      }
+    }
+
+    it("Fails when funding period has not elapsed", async () => {
+      await updateFundingWhenDue();
+
+      try {
+        await program.methods
+          .updateFunding()
+          .accounts({
+            ammState,
+            pythPriceFeed: pythFeed,
+          })
+          .rpc();
+        assert.fail("Should have failed");
+      } catch (err) {
+        assert.include(err.toString(), "FundingNotDue");
+      }
+    });
+
+    it("Succeeds when funding period has elapsed", async () => {
+      await new Promise((resolve) => setTimeout(resolve, 4500));
+
+      const ammBefore = await program.account.ammState.fetch(ammState);
+
+      await updateFundingWhenDue();
+
+      const ammAfter = await program.account.ammState.fetch(ammState);
+
+      assert.ok(
+        ammAfter.lastFundingTs.gt(ammBefore.lastFundingTs),
+        "last_funding_ts should be updated"
+      );
+    });
+
+    it("Positive funding rate when mark > index (long pushes mark up)", async () => {
+      const buf = Buffer.alloc(4);
+      buf.writeUInt32LE(0, 0);
+      const [positionPDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("position"), fundingTrader.publicKey.toBuffer(), buf],
+        program.programId
+      );
+
+      await program.methods
+        .openPosition({
+          isLong: true,
+          collateralAmount: new anchor.BN(500_000_000),
+          leverage: 10,
+          minBaseAmount: new anchor.BN(0),
+        })
+        .accounts({
+          user: fundingTrader.publicKey,
+          userMarginAccount: fundingTraderMargin,
+          position: positionPDA,
+          ammState,
+          pythPriceFeed: pythFeed,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([fundingTrader])
+        .rpc();
+
+      await new Promise((resolve) => setTimeout(resolve, 3500));
+
+      const ammBefore = await program.account.ammState.fetch(ammState);
+
+      await updateFundingWhenDue();
+
+      const ammAfter = await program.account.ammState.fetch(ammState);
+
+      assert.ok(
+        !ammAfter.cumulativeFundingRate.eq(ammBefore.cumulativeFundingRate),
+        "Funding rate should change after update"
+      );
+    });
+
+    it("Negative funding rate when mark < index (short pushes mark down)", async () => {
+      const shortTrader = Keypair.generate();
+      await provider.connection.confirmTransaction(
+        await provider.connection.requestAirdrop(shortTrader.publicKey, 2_000_000_000)
+      );
+
+      const shortTraderUsdc = await createAssociatedTokenAccount(
+        provider.connection,
+        (authority as any).payer,
+        usdcMint,
+        shortTrader.publicKey,
+        { commitment: "confirmed" }
+      );
+
+      await mintTo(
+        provider.connection,
+        (authority as any).payer,
+        usdcMint,
+        shortTraderUsdc,
+        authority.publicKey,
+        1_000_000_000
+      );
+
+      const [shortTraderMargin] = PublicKey.findProgramAddressSync(
+        [Buffer.from("margin"), shortTrader.publicKey.toBuffer()],
+        program.programId
+      );
+
+      await program.methods
+        .depositMargin(new anchor.BN(500_000_000))
+        .accounts({
+          user: shortTrader.publicKey,
+          userMarginAccount: shortTraderMargin,
+          ammState,
+          vault: vault.publicKey,
+          userUsdcAccount: shortTraderUsdc,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([shortTrader])
+        .rpc();
+
+      const buf = Buffer.alloc(4);
+      buf.writeUInt32LE(0, 0);
+      const [positionPDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("position"), shortTrader.publicKey.toBuffer(), buf],
+        program.programId
+      );
+
+      await program.methods
+        .openPosition({
+          isLong: false,
+          collateralAmount: new anchor.BN(200_000_000),
+          leverage: 10,
+          minBaseAmount: new anchor.BN(0),
+        })
+        .accounts({
+          user: shortTrader.publicKey,
+          userMarginAccount: shortTraderMargin,
+          position: positionPDA,
+          ammState,
+          pythPriceFeed: pythFeed,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([shortTrader])
+        .rpc();
+
+      await new Promise((resolve) => setTimeout(resolve, 3500));
+
+      const ammBefore = await program.account.ammState.fetch(ammState);
+
+      await updateFundingWhenDue();
+
+      const ammAfter = await program.account.ammState.fetch(ammState);
+
+      assert.ok(
+        ammAfter.cumulativeFundingRate.lt(ammBefore.cumulativeFundingRate),
+        "Funding rate should be negative when mark < index"
+      );
+    });
+
+    it("Cumulative funding accumulates over multiple updates", async () => {
+      await new Promise((resolve) => setTimeout(resolve, 4500));
+
+      await updateFundingWhenDue();
+
+      const ammAfterFirst = await program.account.ammState.fetch(ammState);
+      const firstRate = ammAfterFirst.cumulativeFundingRate;
+
+      await new Promise((resolve) => setTimeout(resolve, 4500));
+
+      await updateFundingWhenDue();
+
+      const ammAfterSecond = await program.account.ammState.fetch(ammState);
+
+      assert.ok(
+        ammAfterSecond.cumulativeFundingRate.abs().gte(firstRate.abs()),
+        "Cumulative funding should accumulate"
+      );
     });
   });
 });

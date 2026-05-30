@@ -1,12 +1,12 @@
 {
   "pubkey": "7UVimffxr9ow1uXYxsr4LHAcV58mLzhmwaeKvJ1pjLiE",
   "account": {
-    "lamports": 1000000,
+    "lamports": 5249481291,
     "data": [
-      "IvEjY51+9M0AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA7WAgAAAAAZAAAAAAAAAD6////AJQ1dwAAAAAYkDV3AAAAAAA7WAgAAAAAZAAAAAAAAAAA4fUFAAAAAA==",
+      "IvEjY51+9M1gMUcENA3t3zcf1CRyFI8kjp0abRpesqw6zYt/1dayQwHvDYtv2izrpB2hXUCV0do5Kg0vjtDGx7wPTPrIwoC1bU6Yse0BAAAAXCRuAAAAAAD4/////yEbagAAAAD/IRtqAAAAAAAw1+wBAAAALiNwAAAAAAC2mcYbAAAAAAA=",
       "base64"
     ],
-    "owner": "rec5EKMGg6MxZYaMdyBfgwp4d5rB4pK1pz8g7sFQnBv",
+    "owner": "rec5EKMGg6MxZYaMdyBfgwp4d5rB9T1VQH5pJv5LtFJ",
     "executable": false,
     "rentEpoch": 0
   }
