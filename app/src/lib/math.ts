@@ -2,7 +2,12 @@ import { SCALE_1E6, SCALE_1E9 } from "./constants";
 
 export function getMarkPrice(baseReserve: bigint, quoteReserve: bigint): number {
   if (baseReserve === 0n) return 0;
-  return Number((quoteReserve * SCALE_1E6) / baseReserve) / 1_000_000;
+  // Account for decimal difference: SOL (1e9) vs USDC (1e6)
+  // price = (quoteReserve / 1e6) / (baseReserve / 1e9)
+  //       = (quoteReserve * 1e9) / (baseReserve * 1e6)
+  //       = (quoteReserve * 1000) / baseReserve
+  // Multiply by 1e6 for decimal precision
+  return Number((quoteReserve * 1000n * 1000000n) / baseReserve) / 1_000_000;
 }
 
 export function getLiquidationPrice(
