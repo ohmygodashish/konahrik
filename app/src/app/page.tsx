@@ -1,3 +1,6 @@
+"use client";
+
+import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from "react-resizable-panels";
 import { Navbar } from "@/components/Navbar";
 import { MarketHeader } from "@/components/MarketHeader";
 import { MarginPanel } from "@/components/MarginPanel";
@@ -8,33 +11,36 @@ import { ProtocolStatsFooter } from "@/components/ProtocolStatsFooter";
 export default function Home() {
   return (
     <>
-      {/* Navbar */}
       <Navbar />
-
-      {/* Market header */}
       <MarketHeader />
 
-      {/* Main terminal layout */}
-      <main className="flex-1 flex gap-[1px] bg-surface-container overflow-hidden">
-        {/* Left: Chart + Bottom Panel */}
-        <div className="flex-1 flex flex-col gap-[1px] min-w-0">
-          {/* Chart area */}
-          <div className="terminal-panel flex-1 flex items-center justify-center min-h-[300px]">
-            <span className="text-outline text-[13px]">Chart Placeholder</span>
-          </div>
+      <main className="flex-1 overflow-hidden">
+        <PanelGroup orientation="horizontal" className="h-full">
+          <Panel defaultSize={70} minSize={30}>
+            <PanelGroup orientation="vertical" className="h-full">
+              <Panel defaultSize={65} minSize={15}>
+                <div className="terminal-panel h-full flex items-center justify-center">
+                  <span className="text-outline text-[13px]">Chart Placeholder</span>
+                </div>
+              </Panel>
+              <PanelResizeHandle className="h-1 bg-surface-container-high hover:bg-electric-indigo transition-colors cursor-row-resize" />
+              <Panel defaultSize={35} minSize={10}>
+                <BottomPanel />
+              </Panel>
+            </PanelGroup>
+          </Panel>
 
-          {/* Bottom panel */}
-          <BottomPanel />
-        </div>
+          <PanelResizeHandle className="w-1 bg-surface-container-high hover:bg-electric-indigo transition-colors cursor-col-resize" />
 
-        {/* Right: Margin + Trading */}
-        <div className="w-[340px] terminal-panel flex flex-col shrink-0 p-4 overflow-y-auto">
-          <MarginPanel />
-          <TradingPanel />
-        </div>
+          <Panel defaultSize={30} minSize={20}>
+            <div className="terminal-panel h-full flex flex-col p-4 overflow-y-auto">
+              <MarginPanel />
+              <TradingPanel />
+            </div>
+          </Panel>
+        </PanelGroup>
       </main>
 
-      {/* Footer */}
       <ProtocolStatsFooter />
     </>
   );

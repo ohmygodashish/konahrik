@@ -11,7 +11,7 @@ export function BottomPanel() {
   const [activeTab, setActiveTab] = useState<Tab>("positions");
 
   return (
-    <div className="terminal-panel h-56 shrink-0 flex flex-col">
+    <div className="terminal-panel h-full flex flex-col">
       {/* Tabs */}
       <div className="flex border-b border-surface-container px-4">
         <button
