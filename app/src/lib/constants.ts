@@ -8,6 +8,12 @@ export const PYTH_SOL_USD_FEED = new PublicKey(
   "7UVimffxr9ow1uXYxsr4LHAcV58mLzhmwaeKvJ1pjLiE"
 );
 
+export const BINANCE_API_URL = "https://api.binance.com/api/v3/ticker/price";
+
+export const USDC_MINT = new PublicKey(
+  "7A8362V94zwLvUiCHaVU2cCqhcM3hg3q5Gnu9JypoUiR"
+);
+
 export const DEVNET_RPC = "https://api.devnet.solana.com";
 export const LOCALNET_RPC = "http://localhost:8899";
 
