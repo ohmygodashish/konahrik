@@ -41,4 +41,8 @@ pub mod konahrik {
     pub fn withdraw_margin(ctx: Context<WithdrawMargin>, amount: u64) -> Result<()> {
         instructions::handle_withdraw_margin(ctx, amount)
     }
+
+    pub fn update_funding(ctx: Context<UpdateFunding>) -> Result<()> {
+        instructions::handle_update_funding(ctx)
+    }
 }
