@@ -28,4 +28,6 @@ pub enum KonahrikError {
     WithdrawalExceedsAvailable,
     #[msg("Insufficient liquidity in vAMM.")]
     InsufficientLiquidity,
+    #[msg("Self-liquidation not allowed.")]
+    SelfLiquidation,
 }

@@ -45,4 +45,11 @@ pub mod konahrik {
     pub fn update_funding(ctx: Context<UpdateFunding>) -> Result<()> {
         instructions::handle_update_funding(ctx)
     }
+
+    pub fn liquidate(
+        ctx: Context<Liquidate>,
+        params: LiquidateParams,
+    ) -> Result<()> {
+        instructions::handle_liquidate(ctx, params)
+    }
 }
