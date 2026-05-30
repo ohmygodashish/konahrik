@@ -55,7 +55,7 @@ describe("konahrik", () => {
       const initialBaseReserve = new anchor.BN("1000000000000000");
       const initialQuoteReserve = new anchor.BN("140000000000000");
       const initialMarginBps = 1000;
-      const maintMarginBps = 625;
+      const maintMarginBps = 950;
       const liquidationFeeBps = 250;
       const tradingFeeBps = 10;
       const fundingPeriod = new anchor.BN(2);
@@ -124,7 +124,7 @@ describe("konahrik", () => {
             initialBaseReserve: new anchor.BN("1000000000000000"),
             initialQuoteReserve: new anchor.BN("140000000000000"),
             initialMarginBps: 1000,
-            maintMarginBps: 625,
+            maintMarginBps: 950,
             liquidationFeeBps: 250,
             tradingFeeBps: 10,
             fundingPeriod: new anchor.BN(2),
@@ -1206,4 +1206,127 @@ describe("konahrik", () => {
       );
     });
   });
+
+  describe("liquidate", () => {
+    function getPositionPDA(owner: PublicKey, positionId: number): PublicKey {
+      const buf = Buffer.alloc(4);
+      buf.writeUInt32LE(positionId, 0);
+      const [pda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("position"), owner.toBuffer(), buf],
+        program.programId
+      );
+      return pda;
+    }
+
+    async function setupTrader(keypair: Keypair): Promise<{ usdc: PublicKey; margin: PublicKey }> {
+      await provider.connection.confirmTransaction(
+        await provider.connection.requestAirdrop(keypair.publicKey, 5_000_000_000)
+      );
+      const usdc = await createAssociatedTokenAccount(provider.connection, (authority as any).payer, usdcMint, keypair.publicKey, { commitment: "confirmed" });
+      await mintTo(provider.connection, (authority as any).payer, usdcMint, usdc, authority.publicKey, 5_000_000_000);
+      const [margin] = PublicKey.findProgramAddressSync([Buffer.from("margin"), keypair.publicKey.toBuffer()], program.programId);
+      await program.methods
+        .depositMargin(new anchor.BN(2_000_000_000))
+        .accounts({ user: keypair.publicKey, userMarginAccount: margin, ammState, vault: vault.publicKey, userUsdcAccount: usdc, tokenProgram: TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId })
+        .signers([keypair])
+        .rpc();
+      return { usdc, margin };
+    }
+
+    async function pushPriceDownShorts(collateralEach: number) {
+      const pusher = Keypair.generate();
+      await provider.connection.confirmTransaction(await provider.connection.requestAirdrop(pusher.publicKey, 10_000_000_000));
+      const pusherUsdc = await createAssociatedTokenAccount(provider.connection, (authority as any).payer, usdcMint, pusher.publicKey, { commitment: "confirmed" });
+      await mintTo(provider.connection, (authority as any).payer, usdcMint, pusherUsdc, authority.publicKey, collateralEach * 2);
+      const [pusherMargin] = PublicKey.findProgramAddressSync([Buffer.from("margin"), pusher.publicKey.toBuffer()], program.programId);
+      await program.methods
+        .depositMargin(new anchor.BN(collateralEach))
+        .accounts({ user: pusher.publicKey, userMarginAccount: pusherMargin, ammState, vault: vault.publicKey, userUsdcAccount: pusherUsdc, tokenProgram: TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId })
+        .signers([pusher])
+        .rpc();
+      const pushPos = getPositionPDA(pusher.publicKey, 0);
+      await program.methods
+        .openPosition({ isLong: false, collateralAmount: new anchor.BN(collateralEach), leverage: 10, minBaseAmount: new anchor.BN(0) })
+        .accounts({ user: pusher.publicKey, userMarginAccount: pusherMargin, position: pushPos, ammState, pythPriceFeed: pythFeed, systemProgram: SystemProgram.programId })
+        .signers([pusher])
+        .rpc();
+    }
+
+    it("Succeeds when position is underwater", async () => {
+      const victim = Keypair.generate();
+      const { usdc, margin } = await setupTrader(victim);
+      const posPDA = getPositionPDA(victim.publicKey, 0);
+
+      await program.methods
+        .openPosition({ isLong: true, collateralAmount: new anchor.BN(5_000_000), leverage: 10, minBaseAmount: new anchor.BN(0) })
+        .accounts({ user: victim.publicKey, userMarginAccount: margin, position: posPDA, ammState, pythPriceFeed: pythFeed, systemProgram: SystemProgram.programId })
+        .signers([victim])
+        .rpc();
+
+      await pushPriceDownShorts(500_000_000_000);
+
+      const liquidator = Keypair.generate();
+      await provider.connection.confirmTransaction(await provider.connection.requestAirdrop(liquidator.publicKey, 5_000_000_000));
+      const liqUsdc = await createAssociatedTokenAccount(provider.connection, (authority as any).payer, usdcMint, liquidator.publicKey, { commitment: "confirmed" });
+      await mintTo(provider.connection, (authority as any).payer, usdcMint, liqUsdc, authority.publicKey, 1_000_000_000);
+
+      const vaultBefore = await getAccount(provider.connection, vault.publicKey);
+      const liqBefore = await getAccount(provider.connection, liqUsdc);
+
+      await program.methods
+        .liquidate({ positionOwner: victim.publicKey, positionId: 0 })
+        .accounts({
+          liquidator: liquidator.publicKey, liquidatorUsdcAccount: liqUsdc,
+          positionOwnerMargin: margin, position: posPDA,
+          ammState, vault: vault.publicKey, vaultAuthority,
+          pythPriceFeed: pythFeed, tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([liquidator])
+        .rpc();
+
+      const vaultAfter = await getAccount(provider.connection, vault.publicKey);
+      const liqAfter = await getAccount(provider.connection, liqUsdc);
+
+      assert.ok(Number(liqAfter.amount - liqBefore.amount) > 0, "Liquidator receives fee");
+      assert.ok(Number(vaultBefore.amount - vaultAfter.amount) > 0, "Vault decreases");
+
+      try {
+        await program.account.position.fetch(posPDA);
+        assert.fail("Position account closed");
+      } catch (err) {
+        assert.include(err.toString(), "does not exist");
+      }
+    });
+
+    it("Self-liquidation prevented", async () => {
+      const victim = Keypair.generate();
+      const { usdc, margin } = await setupTrader(victim);
+      const posPDA = getPositionPDA(victim.publicKey, 0);
+
+      await program.methods
+        .openPosition({ isLong: true, collateralAmount: new anchor.BN(5_000_000), leverage: 10, minBaseAmount: new anchor.BN(0) })
+        .accounts({ user: victim.publicKey, userMarginAccount: margin, position: posPDA, ammState, pythPriceFeed: pythFeed, systemProgram: SystemProgram.programId })
+        .signers([victim])
+        .rpc();
+
+      await pushPriceDownShorts(500_000_000_000);
+
+      try {
+        await program.methods
+          .liquidate({ positionOwner: victim.publicKey, positionId: 0 })
+          .accounts({
+            liquidator: victim.publicKey, liquidatorUsdcAccount: usdc,
+            positionOwnerMargin: margin, position: posPDA,
+            ammState, vault: vault.publicKey, vaultAuthority,
+            pythPriceFeed: pythFeed, tokenProgram: TOKEN_PROGRAM_ID,
+          })
+          .signers([victim])
+          .rpc();
+        assert.fail("Should have failed");
+      } catch (err) {
+        assert.include(err.toString(), "SelfLiquidation");
+      }
+    });
+  });
 });
+
