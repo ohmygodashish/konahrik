@@ -1,18 +1,10 @@
+import { Navbar } from "@/components/Navbar";
+
 export default function Home() {
   return (
     <>
-      {/* Navbar placeholder */}
-      <nav className="w-full h-14 bg-surface-container-lowest border-b border-surface-container flex items-center px-4 shrink-0">
-        <div className="font-display-md text-[20px] font-bold tracking-tighter text-white flex items-center gap-2">
-          <span
-            className="material-symbols-outlined text-electric-indigo"
-            style={{ fontVariationSettings: "'FILL' 1" }}
-          >
-            token
-          </span>
-          KONAHRIK
-        </div>
-      </nav>
+      {/* Navbar */}
+      <Navbar />
 
       {/* Market header placeholder */}
       <div className="h-14 bg-surface-container-lowest border-b border-surface-container flex items-center px-4 shrink-0">
