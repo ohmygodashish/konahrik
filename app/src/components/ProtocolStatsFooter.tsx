@@ -56,7 +56,7 @@ export function ProtocolStatsFooter() {
 
       <div className="ml-auto flex items-center gap-2">
         <span className="text-outline">Network</span>
-        <span className="text-positive font-mono-data">Localnet</span>
+        <span className="text-positive font-mono-data">Devnet</span>
       </div>
     </footer>
   );

@@ -4,7 +4,7 @@ import { createContext, useContext, useMemo, ReactNode } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { AnchorProvider, Program } from "@coral-xyz/anchor";
 import { Connection } from "@solana/web3.js";
-import { LOCALNET_RPC, PROGRAM_ID } from "@/lib/constants";
+import { DEVNET_RPC, PROGRAM_ID } from "@/lib/constants";
 import IDL_JSON from "@/types/konahrik.json";
 
 type AnchorContextType = {
@@ -27,7 +27,7 @@ export function AnchorProviderWrapper({ children }: { children: ReactNode }) {
       return { program: null, provider: null };
     }
 
-    const connection = new Connection(LOCALNET_RPC, "confirmed");
+    const connection = new Connection(DEVNET_RPC, "confirmed");
     const provider = new AnchorProvider(connection, wallet as any, {
       commitment: "confirmed",
     });
