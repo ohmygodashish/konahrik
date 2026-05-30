@@ -1,15 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { useAnchor } from "@/providers/AnchorProvider";
 import { getMarginPDA, getAmmStatePDA, getVaultAuthorityPDA } from "@/lib/anchor-client";
 import { BN } from "@coral-xyz/anchor";
 import { PublicKey, SystemProgram } from "@solana/web3.js";
-import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import { TOKEN_PROGRAM_ID, getAssociatedTokenAddress, createAssociatedTokenAccountInstruction } from "@solana/spl-token";
 
 export function MarginPanel() {
-  const { publicKey } = useWallet();
+  const { publicKey, sendTransaction } = useWallet();
+  const { connection } = useConnection();
   const { program } = useAnchor();
   const [depositAmount, setDepositAmount] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState("");
@@ -30,7 +31,12 @@ export function MarginPanel() {
       const ammState = await (program.account as any).ammState.fetch(ammStatePDA);
       const vault = ammState.vault as PublicKey;
 
-      const userUsdcAccount = await getTokenAccount(publicKey, ammState.usdcMint as PublicKey);
+      const userUsdcAccount = await getOrCreateTokenAccount(
+        connection,
+        publicKey,
+        ammState.usdcMint as PublicKey,
+        sendTransaction
+      );
 
       await program.methods
         .depositMargin(amount)
@@ -70,7 +76,12 @@ export function MarginPanel() {
       const ammState = await (program.account as any).ammState.fetch(ammStatePDA);
       const vault = ammState.vault as PublicKey;
 
-      const userUsdcAccount = await getTokenAccount(publicKey, ammState.usdcMint as PublicKey);
+      const userUsdcAccount = await getOrCreateTokenAccount(
+        connection,
+        publicKey,
+        ammState.usdcMint as PublicKey,
+        sendTransaction
+      );
 
       await program.methods
         .withdrawMargin(amount)
@@ -166,7 +177,29 @@ export function MarginPanel() {
   );
 }
 
-async function getTokenAccount(owner: PublicKey, mint: PublicKey): Promise<PublicKey> {
-  const { getAssociatedTokenAddress } = await import("@solana/spl-token");
-  return await getAssociatedTokenAddress(mint, owner);
+async function getOrCreateTokenAccount(
+  connection: any,
+  owner: PublicKey,
+  mint: PublicKey,
+  sendTransaction: any
+): Promise<PublicKey> {
+  const ata = await getAssociatedTokenAddress(mint, owner);
+  
+  const accountInfo = await connection.getAccountInfo(ata);
+  
+  if (!accountInfo) {
+    const transaction = new (await import("@solana/web3.js")).Transaction().add(
+      createAssociatedTokenAccountInstruction(
+        owner,
+        ata,
+        owner,
+        mint
+      )
+    );
+    
+    const signature = await sendTransaction(transaction, connection);
+    await connection.confirmTransaction(signature, "confirmed");
+  }
+  
+  return ata;
 }

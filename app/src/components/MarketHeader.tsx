@@ -1,11 +1,26 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useAmmState } from "@/hooks/useAmmState";
 import { getMarkPrice, scaleToNumber } from "@/lib/math";
+import { getIndexPrice, formatPrice } from "@/lib/price-client";
 import { SCALE_1E6, SCALE_1E9 } from "@/lib/constants";
+import type { PriceData } from "@/lib/price-client";
 
 export function MarketHeader() {
   const { ammState, loading } = useAmmState();
+  const [pythPrice, setPythPrice] = useState<PriceData | null>(null);
+
+  useEffect(() => {
+    const fetchPythPrice = async () => {
+      const price = await getIndexPrice();
+      setPythPrice(price);
+    };
+
+    fetchPythPrice();
+    const interval = setInterval(fetchPythPrice, 3000);
+    return () => clearInterval(interval);
+  }, []);
 
   const markPrice = ammState
     ? getMarkPrice(
@@ -95,7 +110,15 @@ export function MarketHeader() {
 
       {/* Mark Price */}
       <div className="text-[18px] font-mono-data text-white font-semibold">
-        {loading ? "---" : markPrice.toFixed(2)}
+        {loading ? "---" : `$${markPrice.toFixed(2)}`}
+      </div>
+
+      {/* Index Price */}
+      <div className="flex flex-col justify-center">
+        <span className="text-outline text-[11px] uppercase">Index</span>
+        <span className="text-white font-mono-data text-[13px]">
+          ${formatPrice(pythPrice)}
+        </span>
       </div>
 
       {/* Stats */}
