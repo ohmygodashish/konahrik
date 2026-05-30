@@ -51,7 +51,7 @@ export function BalancesTab() {
   if (!margin) {
     return (
       <div className="p-4 text-center text-outline text-[13px]">
-        No margin account found. Deposit to get started.
+        Deposit USDC to start trading.
       </div>
     );
   }

@@ -9,6 +9,7 @@ import {
   getAmmStatePDA,
   getPositionPDA,
 } from "@/lib/anchor-client";
+import { submitTransaction } from "@/lib/tx-helpers";
 import { getLiquidationPrice, getMarkPrice } from "@/lib/math";
 import { BN } from "@coral-xyz/anchor";
 import { PublicKey, SystemProgram } from "@solana/web3.js";
@@ -23,10 +24,6 @@ export function TradingPanel() {
   const [marginAmount, setMarginAmount] = useState("");
   const [leverage, setLeverage] = useState(5);
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<{
-    type: "success" | "error";
-    text: string;
-  } | null>(null);
   const [userMargin, setUserMargin] = useState<{
     collateral: number;
     freeCollateral: number;
@@ -82,9 +79,7 @@ export function TradingPanel() {
     if (!program || !publicKey || !marginAmount || !ammState) return;
 
     setLoading(true);
-    setMessage(null);
-
-    try {
+    await submitTransaction(async () => {
       const collateralAmount = new BN(
         Math.floor(parseFloat(marginAmount) * 1_000_000)
       );
@@ -115,14 +110,9 @@ export function TradingPanel() {
         })
         .rpc();
 
-      setMessage({ type: "success", text: "Position opened!" });
       setMarginAmount("");
-    } catch (err) {
-      console.error("Open position failed:", err);
-      setMessage({ type: "error", text: "Failed to open position" });
-    } finally {
-      setLoading(false);
-    }
+    }, `Open ${isLong ? "Long" : "Short"}`);
+    setLoading(false);
   };
 
   if (!publicKey) {
@@ -138,11 +128,10 @@ export function TradingPanel() {
     <div className="terminal-panel p-4">
       <h3 className="text-white font-semibold mb-4">Trade</h3>
 
-      {/* Long/Short Toggle */}
       <div className="flex p-1 bg-surface-container-low rounded-lg mb-4">
         <button
           onClick={() => setIsLong(true)}
-          className={`flex-1 py-2 text-center text-[14px] font-medium rounded-md transition-colors ${
+          className={`flex-1 py-2 text-center text-[14px] font-medium rounded-md transition-colors active:scale-[0.96] ${
             isLong
               ? "bg-positive text-white"
               : "text-outline hover:text-white"
@@ -152,7 +141,7 @@ export function TradingPanel() {
         </button>
         <button
           onClick={() => setIsLong(false)}
-          className={`flex-1 py-2 text-center text-[14px] font-medium rounded-md transition-colors ${
+          className={`flex-1 py-2 text-center text-[14px] font-medium rounded-md transition-colors active:scale-[0.96] ${
             !isLong
               ? "bg-negative text-white"
               : "text-outline hover:text-white"
@@ -162,15 +151,13 @@ export function TradingPanel() {
         </button>
       </div>
 
-      {/* Available Balance */}
       <div className="flex justify-between text-[12px] text-outline mb-4">
         <span>Available</span>
-        <span>
+        <span className="font-mono-data">
           {userMargin ? `$${userMargin.freeCollateral.toFixed(2)}` : "---"}
         </span>
       </div>
 
-      {/* Margin Input */}
       <div className="mb-4">
         <label className="text-outline text-[12px] mb-1 block">
           Margin (USDC)
@@ -184,7 +171,6 @@ export function TradingPanel() {
         />
       </div>
 
-      {/* Leverage Slider */}
       <div className="mb-6">
         <div className="flex justify-between text-[12px] mb-2">
           <span className="text-outline">Leverage</span>
@@ -206,7 +192,6 @@ export function TradingPanel() {
         </div>
       </div>
 
-      {/* Position Preview */}
       <div className="mb-6 space-y-2">
         <div className="flex justify-between text-[12px]">
           <span className="text-outline">Notional</span>
@@ -228,11 +213,10 @@ export function TradingPanel() {
         </div>
       </div>
 
-      {/* Open Position Button */}
       <button
         onClick={handleOpenPosition}
         disabled={loading || !marginAmount || marginNum <= 0}
-        className={`w-full py-3 rounded font-medium text-[15px] transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+        className={`w-full py-3 rounded font-medium text-[15px] active:scale-[0.96] transition-transform disabled:opacity-50 disabled:cursor-not-allowed ${
           isLong
             ? "bg-positive text-white hover:bg-positive/90"
             : "bg-negative text-white hover:bg-negative/90"
@@ -240,19 +224,6 @@ export function TradingPanel() {
       >
         {loading ? "Opening..." : `Open ${isLong ? "Long" : "Short"}`}
       </button>
-
-      {/* Message */}
-      {message && (
-        <div
-          className={`text-[12px] p-2 rounded mt-3 ${
-            message.type === "success"
-              ? "bg-positive/10 text-positive"
-              : "bg-negative/10 text-negative"
-          }`}
-        >
-          {message.text}
-        </div>
-      )}
     </div>
   );
 }

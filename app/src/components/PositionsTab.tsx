@@ -9,6 +9,7 @@ import {
   getAmmStatePDA,
   getPositionPDA,
 } from "@/lib/anchor-client";
+import { submitTransaction } from "@/lib/tx-helpers";
 import { getMarkPrice, getUnrealizedPnl, scaleToNumber } from "@/lib/math";
 import { SCALE_1E6, SCALE_1E9, PYTH_SOL_USD_FEED } from "@/lib/constants";
 import { PublicKey } from "@solana/web3.js";
@@ -57,9 +58,7 @@ export function PositionsTab() {
               entryPrice: pos.entryPrice.toNumber() / 1_000_000,
               margin: pos.margin.toNumber() / 1_000_000,
             });
-          } catch (err) {
-            // Position doesn't exist (already closed)
-          }
+          } catch (err) {}
         }
         setPositions(fetchedPositions);
       } catch (err) {
@@ -76,7 +75,7 @@ export function PositionsTab() {
     if (!program || !publicKey) return;
 
     setClosingId(positionId);
-    try {
+    await submitTransaction(async () => {
       const [marginPDA] = getMarginPDA(publicKey);
       const [ammStatePDA] = getAmmStatePDA();
       const [positionPDA] = getPositionPDA(publicKey, positionId);
@@ -91,11 +90,8 @@ export function PositionsTab() {
           pythPriceFeed: PYTH_SOL_USD_FEED,
         })
         .rpc();
-    } catch (err) {
-      console.error("Close position failed:", err);
-    } finally {
-      setClosingId(null);
-    }
+    }, "Close Position");
+    setClosingId(null);
   };
 
   if (!publicKey) {
@@ -109,7 +105,7 @@ export function PositionsTab() {
   if (positions.length === 0) {
     return (
       <div className="p-4 text-center text-outline text-[13px]">
-        No open positions
+        No open positions. Open your first position to get started.
       </div>
     );
   }
@@ -130,7 +126,7 @@ export function PositionsTab() {
         return (
           <div
             key={pos.positionId}
-            className="border border-surface-container-high rounded p-3"
+            className="border border-surface-container-high rounded p-3 shadow-[0_1px_3px_rgba(0,0,0,0.3)]"
           >
             <div className="flex justify-between items-start mb-2">
               <div>
@@ -144,19 +140,18 @@ export function PositionsTab() {
                   >
                     {pos.isLong ? "LONG" : "SHORT"}
                   </span>
-                  <span className="text-white text-[13px] font-medium">
+                  <span className="text-white text-[13px] font-medium font-mono-data">
                     {pos.size.toFixed(4)} SOL
                   </span>
                 </div>
                 <div className="text-outline text-[11px]">
-                  Entry: ${pos.entryPrice.toFixed(2)} | Margin: $
-                  {pos.margin.toFixed(2)}
+                  Entry: <span className="font-mono-data">${pos.entryPrice.toFixed(2)}</span> | Margin: <span className="font-mono-data">${pos.margin.toFixed(2)}</span>
                 </div>
               </div>
               <button
                 onClick={() => handleClosePosition(pos.positionId)}
                 disabled={closingId === pos.positionId}
-                className="bg-surface-container-high text-white px-3 py-1 rounded text-[12px] hover:bg-surface-variant disabled:opacity-50 transition-colors"
+                className="bg-surface-container-high text-white px-3 py-1 rounded text-[12px] hover:bg-surface-variant active:scale-[0.96] transition-transform disabled:opacity-50"
               >
                 {closingId === pos.positionId ? "Closing..." : "Close"}
               </button>
