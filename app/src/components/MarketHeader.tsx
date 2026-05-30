@@ -122,13 +122,6 @@ export function MarketHeader() {
             ${openInterestShort.toFixed(2)}
           </span>
         </div>
-
-        <div className="flex flex-col justify-center">
-          <span className="text-outline text-[11px] uppercase">
-            Funding Rate
-          </span>
-          <span className="text-white font-mono-data text-[13px]">0.00%</span>
-        </div>
       </div>
     </div>
   );
