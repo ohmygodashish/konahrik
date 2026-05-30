@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Space_Grotesk, JetBrains_Mono } from "next/font/google";
+import { SolanaProviders } from "@/providers/SolanaProviders";
+import { AnchorProviderWrapper } from "@/providers/AnchorProvider";
 import "./globals.css";
 
 const inter = Inter({
@@ -41,7 +43,9 @@ export default function RootLayout({
       <body
         className={`${inter.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable} h-screen flex flex-col font-body-sm text-body-sm antialiased selection:bg-electric-indigo selection:text-white`}
       >
-        {children}
+        <SolanaProviders>
+          <AnchorProviderWrapper>{children}</AnchorProviderWrapper>
+        </SolanaProviders>
       </body>
     </html>
   );
