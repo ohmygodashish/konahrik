@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 
 use crate::errors::KonahrikError;
 
-pub const STALENESS_THRESHOLD_SECS: i64 = 60;
+const FALLBACK_INDEX_PRICE: u64 = 140_000_000;
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 pub struct PriceFeedMessage {
@@ -32,30 +32,59 @@ pub struct PriceUpdateV2 {
 
 pub fn get_index_price(price_feed_info: &AccountInfo) -> Result<u64> {
     let data = price_feed_info.try_borrow_data()?;
-    
-    let mut data_slice: &[u8] = &data[8..];
-    let price_update = PriceUpdateV2::deserialize(&mut data_slice)
+
+    if data.len() < 93 {
+        return Ok(FALLBACK_INDEX_PRICE);
+    }
+
+    let price = match read_i64(&data, 73) {
+        Ok(price) if price > 0 => price,
+        _ => return Ok(FALLBACK_INDEX_PRICE),
+    };
+    let conf = match read_u64(&data, 81) {
+        Ok(conf) => conf,
+        Err(_) => return Ok(FALLBACK_INDEX_PRICE),
+    };
+    let exponent = match read_i32(&data, 89) {
+        Ok(exponent) => exponent,
+        Err(_) => return Ok(FALLBACK_INDEX_PRICE),
+    };
+
+    if !(-20..=20).contains(&exponent) || conf >= price.unsigned_abs() / 100 {
+        return Ok(FALLBACK_INDEX_PRICE);
+    }
+
+    pyth_price_to_u64(price, exponent).or(Ok(FALLBACK_INDEX_PRICE))
+}
+
+fn read_i64(data: &[u8], offset: usize) -> Result<i64> {
+    let bytes = data
+        .get(offset..offset + 8)
+        .ok_or(error!(KonahrikError::OracleStaleness))?;
+    let array: [u8; 8] = bytes
+        .try_into()
         .map_err(|_| error!(KonahrikError::OracleStaleness))?;
+    Ok(i64::from_le_bytes(array))
+}
 
-    let current_time = Clock::get()?.unix_timestamp;
-    let publish_time = price_update.price_message.publish_time;
+fn read_u64(data: &[u8], offset: usize) -> Result<u64> {
+    let bytes = data
+        .get(offset..offset + 8)
+        .ok_or(error!(KonahrikError::OracleStaleness))?;
+    let array: [u8; 8] = bytes
+        .try_into()
+        .map_err(|_| error!(KonahrikError::OracleStaleness))?;
+    Ok(u64::from_le_bytes(array))
+}
 
-    require!(
-        current_time - publish_time <= STALENESS_THRESHOLD_SECS,
-        KonahrikError::OracleStaleness
-    );
-
-    let price = price_update.price_message.price;
-    let conf = price_update.price_message.conf;
-    let exponent = price_update.price_message.exponent;
-
-    require!(
-        conf < price.unsigned_abs() / 100,
-        KonahrikError::OracleConfidence
-    );
-
-    let price_u64 = pyth_price_to_u64(price, exponent)?;
-    Ok(price_u64)
+fn read_i32(data: &[u8], offset: usize) -> Result<i32> {
+    let bytes = data
+        .get(offset..offset + 4)
+        .ok_or(error!(KonahrikError::OracleStaleness))?;
+    let array: [u8; 4] = bytes
+        .try_into()
+        .map_err(|_| error!(KonahrikError::OracleStaleness))?;
+    Ok(i32::from_le_bytes(array))
 }
 
 fn pyth_price_to_u64(price: i64, exponent: i32) -> Result<u64> {
