@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Space_Grotesk, JetBrains_Mono } from "next/font/google";
 import { SolanaProviders } from "@/providers/SolanaProviders";
 import { AnchorProviderWrapper } from "@/providers/AnchorProvider";
+import { Toaster } from "sonner";
 import "./globals.css";
 
 const inter = Inter({
@@ -46,6 +47,18 @@ export default function RootLayout({
         <SolanaProviders>
           <AnchorProviderWrapper>{children}</AnchorProviderWrapper>
         </SolanaProviders>
+        <Toaster
+          position="bottom-right"
+          theme="dark"
+          richColors
+          toastOptions={{
+            style: {
+              background: "#1f1f24",
+              border: "1px solid #292a2e",
+              color: "#e3e2e7",
+            },
+          }}
+        />
       </body>
     </html>
   );
