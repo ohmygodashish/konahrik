@@ -20,10 +20,10 @@ Konahrik is a fully on-chain perpetual futures exchange powered by a virtual aut
   - [Localnet (Full Local Development)](#localnet-full-local-development)
   - [Devnet (Test Against Live Network)](#devnet-test-against-live-network)
 - [Scripts](#scripts)
-  - [init.ts](#scripts-initts)
-  - [update-config.ts](#scripts-update-configts)
-  - [keeper.ts](#scripts-keeperts)
-  - [faucet.ts](#scripts-faucetts)
+  - [init.ts](#scriptsinitts)
+  - [update-config.ts](#scriptsupdate-configts)
+  - [keeper.ts](#scriptskeeperts)
+  - [faucet.ts](#scriptsfaucetts)
 - [Deployment Guide](#deployment-guide)
 - [Precision Notes](#precision-notes)
 - [License](#license)
@@ -517,4 +517,4 @@ All on-chain prices use fixed-point arithmetic:
 
 ## License
 
-MIT
+[MIT](LICENSE)
