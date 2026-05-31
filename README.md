@@ -20,6 +20,10 @@ Konahrik is a fully on-chain perpetual futures exchange powered by a virtual aut
   - [Localnet (Full Local Development)](#localnet-full-local-development)
   - [Devnet (Test Against Live Network)](#devnet-test-against-live-network)
 - [Scripts](#scripts)
+  - [init.ts](#scripts-initts)
+  - [update-config.ts](#scripts-update-configts)
+  - [keeper.ts](#scripts-keeperts)
+  - [faucet.ts](#scripts-faucetts)
 - [Deployment Guide](#deployment-guide)
 - [Precision Notes](#precision-notes)
 - [License](#license)
@@ -449,6 +453,24 @@ Options:
 | `--trading-fee <bps>` | Trading fee (10 = 0.1%) |
 | `--liquidation-fee <bps>` | Liquidation fee (250 = 2.5%) |
 | `--show` | Display current config |
+
+### `scripts/keeper.ts`
+
+Continuous funding rate updater. Calls `update_funding` on-chain every funding period so the cumulative funding rate accumulates for position settlement. The frontend displays the funding rate independently (computed locally from mark and index prices), but on-chain settlement requires the keeper.
+
+**Run in an open terminal:**
+```bash
+npx ts-node scripts/keeper.ts
+```
+
+**For production**, run it as a background process:
+
+| Method | How |
+|---|---|
+| GitHub Actions | Create a cron workflow (e.g., every 5 min) with Solana keypair in repo secrets |
+| systemd | Define a service that restarts on failure |
+| pm2 | `pm2 start scripts/keeper.ts --interpreter npx --name konahrik-keeper` |
+| VPS | Any cheap Linux server with tmux + Node.js |
 
 ### `scripts/faucet.ts`
 
