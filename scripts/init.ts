@@ -105,7 +105,7 @@ async function main() {
     maintMarginBps: 625, // 6.25%
     liquidationFeeBps: 250, // 2.5%
     tradingFeeBps: 10, // 0.1%
-    fundingPeriod: new anchor.BN(3600), // 1 hour
+    fundingPeriod: new anchor.BN(5), // 5 seconds
   };
 
   const tx = await program.methods
