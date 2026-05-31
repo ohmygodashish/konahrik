@@ -161,7 +161,7 @@ pub fn handle_open_position(ctx: Context<OpenPosition>, params: OpenPositionPara
     position.size = size;
     position.notional = notional;
     position.entry_price = (notional_u128
-        .checked_mul(1_000_000)
+        .checked_mul(1_000_000_000)
         .ok_or(KonahrikError::MathOverflow)?
         .checked_div(size as u128)
         .ok_or(KonahrikError::MathOverflow)?) as u64;

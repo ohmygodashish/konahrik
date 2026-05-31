@@ -190,7 +190,7 @@ async function main() {
     updateParams.quoteReserve = new anchor.BN(newQuote.toString());
   }
   if (args.price !== undefined) {
-    newQuote = newBase * BigInt(Math.floor(args.price * 1000)) / 1000n;
+    newQuote = newBase * BigInt(Math.floor(args.price * 1000)) / 1_000_000n;
     updateParams.quoteReserve = new anchor.BN(newQuote.toString());
     console.log(`\nTarget price $${args.price} → quote = ${newQuote.toString()}`);
   }

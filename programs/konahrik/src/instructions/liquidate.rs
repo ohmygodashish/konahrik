@@ -87,7 +87,7 @@ pub fn handle_liquidate(ctx: Context<Liquidate>, params: LiquidateParams) -> Res
 
     let amm_state = &ctx.accounts.amm_state;
 
-    let funding_delta = (position.size as i128)
+    let funding_delta = (position.notional as i128)
         .checked_mul(
             amm_state
                 .cumulative_funding_rate
@@ -106,7 +106,7 @@ pub fn handle_liquidate(ctx: Context<Liquidate>, params: LiquidateParams) -> Res
 
     let mark_price = amm_state
         .quote_asset_reserve
-        .checked_mul(1_000_000)
+        .checked_mul(1_000_000_000)
         .ok_or(KonahrikError::MathOverflow)?
         .checked_div(amm_state.base_asset_reserve)
         .ok_or(KonahrikError::MathOverflow)?;
@@ -120,7 +120,7 @@ pub fn handle_liquidate(ctx: Context<Liquidate>, params: LiquidateParams) -> Res
             .ok_or(KonahrikError::MathOverflow)?
             .checked_mul(size_sol)
             .ok_or(KonahrikError::MathOverflow)?
-            .checked_div(1_000_000)
+            .checked_div(1_000_000_000)
             .ok_or(KonahrikError::MathOverflow)?
     } else {
         entry_price
@@ -128,7 +128,7 @@ pub fn handle_liquidate(ctx: Context<Liquidate>, params: LiquidateParams) -> Res
             .ok_or(KonahrikError::MathOverflow)?
             .checked_mul(size_sol)
             .ok_or(KonahrikError::MathOverflow)?
-            .checked_div(1_000_000)
+            .checked_div(1_000_000_000)
             .ok_or(KonahrikError::MathOverflow)?
     };
 

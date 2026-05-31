@@ -51,7 +51,7 @@ pub fn handle_close_position(ctx: Context<ClosePosition>) -> Result<()> {
 
     let amm_state = &ctx.accounts.amm_state;
 
-    let funding_delta = (position.size as i128)
+    let funding_delta = (position.notional as i128)
         .checked_mul(
             amm_state
                 .cumulative_funding_rate

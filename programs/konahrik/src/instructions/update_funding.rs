@@ -33,7 +33,7 @@ pub fn handle_update_funding(ctx: Context<UpdateFunding>) -> Result<()> {
 
     let mark_price = amm_state
         .quote_asset_reserve
-        .checked_mul(1_000_000)
+        .checked_mul(1_000_000_000)
         .ok_or(KonahrikError::MathOverflow)?
         .checked_div(amm_state.base_asset_reserve)
         .ok_or(KonahrikError::MathOverflow)?;
