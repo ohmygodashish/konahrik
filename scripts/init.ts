@@ -100,7 +100,7 @@ async function main() {
   console.log("Initializing AMM...");
   const params = {
     initialBaseReserve: new anchor.BN("1000000000000000"), // 1M SOL * 1e9
-    initialQuoteReserve: new anchor.BN("140000000000000"), // 140M USDC * 1e6
+    initialQuoteReserve: new anchor.BN("80000000000000"), // 80M USDC * 1e6
     initialMarginBps: 1000, // 10%
     maintMarginBps: 625, // 6.25%
     liquidationFeeBps: 250, // 2.5%
