@@ -23,6 +23,7 @@ Konahrik is a fully on-chain perpetual futures exchange powered by a virtual aut
   - [init.ts](#scriptsinitts)
   - [update-config.ts](#scriptsupdate-configts)
   - [keeper.ts](#scriptskeeperts)
+  - [liquidator.ts](#scriptsliquidatorts)
   - [faucet.ts](#scriptsfaucetts)
 - [Deployment Guide](#deployment-guide)
 - [Precision Notes](#precision-notes)
@@ -476,6 +477,24 @@ npx ts-node scripts/keeper.ts
 | GitHub Actions | Create a cron workflow (e.g., every 5 min) with Solana keypair in repo secrets |
 | systemd | Define a service that restarts on failure |
 | pm2 | `pm2 start scripts/keeper.ts --interpreter npx --name konahrik-keeper` |
+| VPS | Any cheap Linux server with tmux + Node.js |
+
+### `scripts/liquidator.ts`
+
+Permissionless liquidation bot. Scans all open Position accounts, computes margin ratio against the maintenance threshold, and calls `liquidate` on underwater positions. The liquidator receives a liquidation fee (in BPS of notional) from the vault as incentive. Auto-creates a USDC token account for the liquidator if one doesn't exist.
+
+**Run in an open terminal:**
+```bash
+npx ts-node scripts/liquidator.ts
+```
+
+**For production**, run it as a background process:
+
+| Method | How |
+|---|---|
+| GitHub Actions | Create a cron workflow (e.g., every 1 min) with Solana keypair in repo secrets |
+| systemd | Define a service that restarts on failure |
+| pm2 | `pm2 start scripts/liquidator.ts --interpreter npx --name konahrik-liquidator` |
 | VPS | Any cheap Linux server with tmux + Node.js |
 
 ### `scripts/faucet.ts`
