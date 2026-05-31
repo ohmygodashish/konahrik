@@ -14,7 +14,7 @@ konahrik = "9HBoParaQQoyCRDEgq3REHkrqtnuwc3hVhQ3C7VDBJyk"
 konahrik = "9HBoParaQQoyCRDEgq3REHkrqtnuwc3hVhQ3C7VDBJyk"
 
 [provider]
-cluster = "devnet"
+cluster = "localnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]
