@@ -1,11 +1,11 @@
-import * as anchor from "@coral-xyz/anchor";
+import * as anchor from "@anchor-lang/core";
 import {
   createAssociatedTokenAccount,
   mintTo,
   getAssociatedTokenAddress,
   getAccount,
 } from "@solana/spl-token";
-import { PublicKey, Keypair } from "@solana/web3.js";
+import { PublicKey, Keypair, Connection } from "@solana/web3.js";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
@@ -38,7 +38,7 @@ async function main() {
   console.log(`📝 Mint Authority: ${walletKeypair.publicKey.toBase58()}`);
 
   // 2. Connect to devnet
-  const connection = new anchor.web3.Connection(DEVNET_RPC, "confirmed");
+  const connection = new Connection(DEVNET_RPC, "confirmed");
 
   // 3. Load USDC mint from constants
   const constantsPath = path.join(__dirname, "..", "app", "src", "lib", "constants.ts");

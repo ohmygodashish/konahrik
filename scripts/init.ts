@@ -1,12 +1,12 @@
-import * as anchor from "@coral-xyz/anchor";
-import { Program } from "@coral-xyz/anchor";
+import * as anchor from "@anchor-lang/core";
+import { Program } from "@anchor-lang/core";
 import {
   createMint,
   createAssociatedTokenAccount,
   mintTo,
   TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
-import { PublicKey, Keypair } from "@solana/web3.js";
+import { PublicKey, Keypair, Connection, SystemProgram, SYSVAR_RENT_PUBKEY, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
@@ -27,7 +27,7 @@ async function main() {
   console.log(`📝 Wallet: ${walletKeypair.publicKey.toBase58()}`);
 
   // 2. Connect to devnet
-  const connection = new anchor.web3.Connection(DEVNET_RPC, "confirmed");
+  const connection = new Connection(DEVNET_RPC, "confirmed");
   const provider = new anchor.AnchorProvider(
     connection,
     new anchor.Wallet(walletKeypair),
@@ -36,7 +36,7 @@ async function main() {
   anchor.setProvider(provider);
 
   const balance = await connection.getBalance(walletKeypair.publicKey);
-  console.log(`💰 Balance: ${balance / anchor.web3.LAMPORTS_PER_SOL} SOL\n`);
+  console.log(`💰 Balance: ${balance / LAMPORTS_PER_SOL} SOL\n`);
 
   // 3. Load program
   const idlPath = path.join(__dirname, "..", "target", "idl", "konahrik.json");
@@ -118,8 +118,8 @@ async function main() {
       usdcMint: usdcMint,
       pythFeed: PYTH_SOL_USD_FEED,
       tokenProgram: TOKEN_PROGRAM_ID,
-      systemProgram: anchor.web3.SystemProgram.programId,
-      rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+      systemProgram: SystemProgram.programId,
+      rent: SYSVAR_RENT_PUBKEY,
     })
     .signers([vaultKeypair])
     .rpc();
