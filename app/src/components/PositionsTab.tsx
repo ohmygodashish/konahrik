@@ -56,7 +56,7 @@ export function PositionsTab() {
               isLong: pos.isLong,
               size: pos.size.toNumber() / 1_000_000_000,
               notional: pos.notional.toNumber() / 1_000_000,
-              entryPrice: pos.entryPrice.toNumber() / 1_000,
+              entryPrice: pos.entryPrice.toNumber() / 1_000_000,
               margin: pos.margin.toNumber() / 1_000_000,
             });
           } catch (err) {}
