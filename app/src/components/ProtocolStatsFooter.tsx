@@ -1,11 +1,13 @@
 "use client";
 
 import { useAmmState } from "@/hooks/useAmmState";
+import { useIndexPrice } from "@/hooks/useIndexPrice";
 import { getMarkPrice, scaleToNumber } from "@/lib/math";
 import { SCALE_1E6 } from "@/lib/constants";
 
 export function ProtocolStatsFooter() {
   const { ammState, loading } = useAmmState();
+  const { currentPrice: indexPrice } = useIndexPrice();
 
   const markPrice = ammState
     ? getMarkPrice(
@@ -13,6 +15,11 @@ export function ProtocolStatsFooter() {
         BigInt(ammState.quoteAssetReserve.toString())
       )
     : 0;
+
+  const fundingRate =
+    markPrice && indexPrice
+      ? (markPrice - indexPrice) / indexPrice / 24
+      : null;
 
   const openInterestLong = ammState
     ? scaleToNumber(BigInt(ammState.openInterestLong.toString()), SCALE_1E6)
@@ -43,7 +50,19 @@ export function ProtocolStatsFooter() {
 
         <div className="flex gap-2">
           <span className="text-outline">Funding Rate</span>
-          <span className="text-white font-mono-data">0.00%</span>
+          <span
+            className={`font-mono-data ${
+              fundingRate === null
+                ? "text-outline"
+                : fundingRate >= 0
+                  ? "text-positive"
+                  : "text-negative"
+            }`}
+          >
+            {fundingRate === null
+              ? "---"
+              : `${fundingRate >= 0 ? "+" : ""}${(fundingRate * 100).toFixed(4)}%`}
+          </span>
         </div>
 
         <div className="flex gap-2">
