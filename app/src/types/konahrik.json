@@ -1104,6 +1104,18 @@
             "type": {
               "option": "i64"
             }
+          },
+          {
+            "name": "base_reserve",
+            "type": {
+              "option": "u128"
+            }
+          },
+          {
+            "name": "quote_reserve",
+            "type": {
+              "option": "u128"
+            }
           }
         ]
       }
