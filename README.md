@@ -319,27 +319,17 @@ export const DEVNET_RPC = "http://localhost:8899";
 
 ```bash
 anchor build
-anchor program deploy --provider.cluster devnet
 ```
 
-Using a custom RPC endpoint (e.g., Helius) for faster deployment:
-```bash
-anchor program deploy --provider.cluster https://devnet.helius-rpc.com/?api-key=YOUR_API_KEY
-```
-
-**4. Start local validator with Pyth oracle fixture:**
+**4. Start local validator (in a separate terminal):**
 
 ```bash
-solana-test-validator --clone 7UVimffxr9ow1uXYxsr4LHAcV58mLzhmwaeKvJ1pjLiE --url devnet
+anchor localnet
 ```
 
-Or use the Anchor test validator (includes the Pyth fixture automatically):
+> `anchor localnet` starts a local validator with persisted state and automatically clones the Pyth oracle fixtures defined in `Anchor.toml`.
 
-```bash
-anchor test --skip-deploy
-```
-
-**5. Deploy and initialize:**
+**5. Deploy and initialize (after validator is running):**
 
 ```bash
 anchor deploy
@@ -386,6 +376,11 @@ anchor build
 anchor program deploy --provider.cluster devnet
 ```
 
+Using a custom RPC endpoint (e.g., Helius) for faster deployment:
+```bash
+anchor program deploy --provider.cluster https://devnet.helius-rpc.com/?api-key=YOUR_API_KEY
+```
+
 If the binary is larger than the on-chain ProgramData account, extend it first:
 ```bash
 solana program show <PROGRAM_ID> --url devnet
@@ -393,6 +388,11 @@ solana program show <PROGRAM_ID> --url devnet
 solana program extend <PROGRAM_ID> 25000 --url devnet
 anchor program deploy --provider.cluster devnet
 ```
+
+> After building (`anchor build`), the IDL is regenerated at `target/idl/konahrik.json`. Copy it to the frontend:
+> ```bash
+> cp target/idl/konahrik.json app/src/types/konahrik.json
+> ```
 
 **3. Initialize (first deployment only):**
 
@@ -406,13 +406,7 @@ npx ts-node scripts/init.ts
 npx ts-node scripts/update-config.ts --price <current_sol_price> --funding-period 5 --initial-margin 1000 --maint-margin 625 --liquidation-fee 250 --trading-fee 10
 ```
 
-**5. Copy regenerated IDL to frontend:**
-
-```bash
-cp target/idl/konahrik.json app/src/types/konahrik.json
-```
-
-**6. Start the frontend:**
+**5. Start the frontend:**
 
 ```bash
 cd app && npm run dev
