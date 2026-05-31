@@ -318,6 +318,12 @@ export const DEVNET_RPC = "http://localhost:8899";
 
 ```bash
 anchor build
+anchor program deploy --provider.cluster devnet
+```
+
+Using a custom RPC endpoint (e.g., Helius) for faster deployment:
+```bash
+anchor program deploy --provider.cluster https://devnet.helius-rpc.com/?api-key=YOUR_API_KEY
 ```
 
 **4. Start local validator with Pyth oracle fixture:**
