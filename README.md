@@ -1,4 +1,4 @@
-# Konahrik
+![Konahrik Banner](images/banner.png)
 
 **Virtual AMM perpetual futures trading terminal on Solana.**
 
