@@ -10,6 +10,7 @@ import {
   getPositionPDA,
 } from "@/lib/anchor-client";
 import { submitTransaction } from "@/lib/tx-helpers";
+import { saveClosedPosition } from "@/lib/history";
 import { getMarkPrice, getUnrealizedPnl, scaleToNumber } from "@/lib/math";
 import { SCALE_1E6, SCALE_1E9, PYTH_SOL_USD_FEED } from "@/lib/constants";
 import { PublicKey } from "@solana/web3.js";
@@ -74,6 +75,8 @@ export function PositionsTab() {
   const handleClosePosition = async (positionId: number) => {
     if (!program || !publicKey) return;
 
+    const pos = positions.find((p) => p.positionId === positionId);
+
     setClosingId(positionId);
     await submitTransaction(async () => {
       const [marginPDA] = getMarginPDA(publicKey);
@@ -90,6 +93,17 @@ export function PositionsTab() {
           pythPriceFeed: PYTH_SOL_USD_FEED,
         })
         .rpc();
+
+      if (pos) {
+        saveClosedPosition(publicKey.toBase58(), {
+          positionId: pos.positionId,
+          isLong: pos.isLong,
+          size: pos.size,
+          notional: pos.notional,
+          entryPrice: pos.entryPrice,
+          margin: pos.margin,
+        });
+      }
     }, "Close Position");
     setClosingId(null);
   };
