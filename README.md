@@ -530,7 +530,7 @@ All on-chain prices use fixed-point arithmetic:
 - **USDC amounts:** 1e6 scale. E.g. `1 USDC = 1,000,000`.
 - **Funding rate:** 1e9 scale (unitless ratio).
 - **Fees (bps):** Basis points, divided by 10,000: `fee = amount × bps / 10_000`.
-- **Entry price formula:** `entry_price = notional × 1_000_000_000 / size` — the extra factor of 1e3 (beyond the naive 1e6/1e9 adjustment) is to maintain precision in the integer division.
+- **Entry price formula:** `entry_price = notional × 1_000_000_000 / size` — adjusts for the scale difference between USDC (1e6) and SOL lamports (1e9), and prices are stored in 1e6 scale.
 
 ---
 
