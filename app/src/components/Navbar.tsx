@@ -1,11 +1,20 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { WalletButton } from "./WalletButton";
 
 export function Navbar() {
+  const pathname = usePathname();
+
   return (
     <nav className="w-full h-14 bg-surface-container-lowest border-b border-surface-container flex justify-between items-center px-4 shrink-0 z-50">
       {/* Brand / Left */}
       <div className="flex items-center gap-6">
-        <div className="font-display-md text-[20px] font-bold tracking-tighter text-white flex items-center gap-2">
+        <Link
+          href="/"
+          className="font-display-md text-[20px] font-bold tracking-tighter text-white flex items-center gap-2"
+        >
           <span
             className="material-symbols-outlined text-electric-indigo"
             style={{ fontVariationSettings: "'FILL' 1" }}
@@ -13,22 +22,30 @@ export function Navbar() {
             token
           </span>
           KONAHRIK
-        </div>
+        </Link>
 
         {/* Navigation Links */}
         <div className="hidden md:flex gap-4 items-center">
-          <a
-            className="text-white text-[14px] font-medium py-4 transition-colors"
-            href="#"
+          <Link
+            className={`text-[14px] font-medium py-4 transition-colors ${
+              pathname === "/terminal"
+                ? "text-white"
+                : "text-on-surface-variant hover:text-white"
+            }`}
+            href="/terminal"
           >
             Terminal
-          </a>
-          <a
-            className="text-on-surface-variant text-[14px] font-medium py-4 hover:text-white transition-colors"
-            href="#"
+          </Link>
+          <Link
+            className={`text-[14px] font-medium py-4 transition-colors ${
+              pathname === "/dashboard"
+                ? "text-white"
+                : "text-on-surface-variant hover:text-white"
+            }`}
+            href="/dashboard"
           >
             Dashboard
-          </a>
+          </Link>
         </div>
       </div>
 
