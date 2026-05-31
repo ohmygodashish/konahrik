@@ -85,7 +85,7 @@ async function main() {
     walletKeypair,
     usdcMint,
     targetUsdcAccount,
-    walletKeypair.publicKey,
+    walletKeypair,
     Math.floor(amount * 1_000_000) // 6 decimals
   );
 
