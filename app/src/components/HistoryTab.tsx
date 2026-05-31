@@ -56,11 +56,11 @@ export function HistoryTab() {
                   {pos.isLong ? "LONG" : "SHORT"}
                 </span>
                 <span className="text-white text-[13px] font-medium font-mono-data">
-                  {pos.size.toFixed(4)} SOL
+                  {pos.size.toFixed(4)} SOL <span className="text-outline">({(pos.notional / pos.margin).toFixed(1)}x) (${pos.margin.toFixed(2)})</span>
                 </span>
               </div>
               <div className="text-outline text-[11px]">
-                Entry: <span className="font-mono-data">${pos.entryPrice.toFixed(2)}</span> | Margin: <span className="font-mono-data">${pos.margin.toFixed(2)}</span>
+                Entry: <span className="font-mono-data">${pos.entryPrice.toFixed(2)}</span>
               </div>
             </div>
             <div className="text-right">

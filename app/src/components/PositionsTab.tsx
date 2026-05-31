@@ -56,7 +56,7 @@ export function PositionsTab() {
               isLong: pos.isLong,
               size: pos.size.toNumber() / 1_000_000_000,
               notional: pos.notional.toNumber() / 1_000_000,
-              entryPrice: pos.entryPrice.toNumber() / 1_000_000,
+              entryPrice: pos.entryPrice.toNumber() / 1_000,
               margin: pos.margin.toNumber() / 1_000_000,
             });
           } catch (err) {}
@@ -155,11 +155,11 @@ export function PositionsTab() {
                     {pos.isLong ? "LONG" : "SHORT"}
                   </span>
                   <span className="text-white text-[13px] font-medium font-mono-data">
-                    {pos.size.toFixed(4)} SOL
+                    {pos.size.toFixed(4)} SOL <span className="text-outline">({(pos.notional / pos.margin).toFixed(1)}x) (${pos.margin.toFixed(2)})</span>
                   </span>
                 </div>
                 <div className="text-outline text-[11px]">
-                  Entry: <span className="font-mono-data">${pos.entryPrice.toFixed(2)}</span> | Margin: <span className="font-mono-data">${pos.margin.toFixed(2)}</span>
+                  Entry: <span className="font-mono-data">${pos.entryPrice.toFixed(2)}</span>
                 </div>
               </div>
               <button
