@@ -25,8 +25,11 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "KONAHRIK - vAMM Perpetuals DEX",
+  title: "Konahrik",
   description: "Virtual AMM perpetual futures trading terminal on Solana",
+  icons: {
+    icon: "/icon.svg",
+  },
 };
 
 export default function RootLayout({
