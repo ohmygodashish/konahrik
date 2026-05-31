@@ -13,16 +13,16 @@ export function MarginPanel() {
   const { publicKey, sendTransaction } = useWallet();
   const { connection } = useConnection();
   const { program } = useAnchor();
-  const [depositAmount, setDepositAmount] = useState("");
-  const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [amount, setAmount] = useState("");
+  const [mode, setMode] = useState<"deposit" | "withdraw">("deposit");
   const [loading, setLoading] = useState(false);
 
   const handleDeposit = async () => {
-    if (!program || !publicKey || !depositAmount) return;
+    if (!program || !publicKey || !amount) return;
 
     setLoading(true);
     await submitTransaction(async () => {
-      const amount = new BN(Math.floor(parseFloat(depositAmount) * 1_000_000));
+      const value = new BN(Math.floor(parseFloat(amount) * 1_000_000));
       const [marginPDA] = getMarginPDA(publicKey);
       const [ammStatePDA] = getAmmStatePDA();
 
@@ -37,7 +37,7 @@ export function MarginPanel() {
       );
 
       await program.methods
-        .depositMargin(amount)
+        .depositMargin(value)
         .accounts({
           user: publicKey,
           userMarginAccount: marginPDA,
@@ -49,17 +49,17 @@ export function MarginPanel() {
         })
         .rpc();
 
-      setDepositAmount("");
+      setAmount("");
     }, "Deposit");
     setLoading(false);
   };
 
   const handleWithdraw = async () => {
-    if (!program || !publicKey || !withdrawAmount) return;
+    if (!program || !publicKey || !amount) return;
 
     setLoading(true);
     await submitTransaction(async () => {
-      const amount = new BN(Math.floor(parseFloat(withdrawAmount) * 1_000_000));
+      const value = new BN(Math.floor(parseFloat(amount) * 1_000_000));
       const [marginPDA] = getMarginPDA(publicKey);
       const [ammStatePDA] = getAmmStatePDA();
       const [vaultAuthority] = getVaultAuthorityPDA();
@@ -75,7 +75,7 @@ export function MarginPanel() {
       );
 
       await program.methods
-        .withdrawMargin(amount)
+        .withdrawMargin(value)
         .accounts({
           user: publicKey,
           userMarginAccount: marginPDA,
@@ -87,10 +87,13 @@ export function MarginPanel() {
         })
         .rpc();
 
-      setWithdrawAmount("");
+      setAmount("");
     }, "Withdrawal");
     setLoading(false);
   };
+
+  const handleAction = mode === "deposit" ? handleDeposit : handleWithdraw;
+  const isDeposit = mode === "deposit";
 
   if (!publicKey) {
     return (
@@ -103,46 +106,50 @@ export function MarginPanel() {
 
   return (
     <div className="terminal-panel p-4 mb-4">
-      <h3 className="text-white font-semibold mb-4">Margin</h3>
+      <h3 className="text-white font-semibold mb-3">Margin</h3>
 
-      <div className="mb-4">
-        <label className="text-outline text-[12px] mb-1 block">Deposit USDC</label>
-        <div className="flex gap-2">
-          <input
-            type="number"
-            value={depositAmount}
-            onChange={(e) => setDepositAmount(e.target.value)}
-            placeholder="0.00"
-            className="flex-1 bg-surface-container-low border border-surface-container-high rounded px-3 py-2 text-white font-mono-data text-[14px] focus:outline-none focus:border-outline"
-          />
-          <button
-            onClick={handleDeposit}
-            disabled={loading || !depositAmount}
-            className="bg-positive text-white px-4 py-2 rounded hover:bg-positive/90 active:scale-[0.96] transition-transform disabled:opacity-50 disabled:cursor-not-allowed text-[14px] font-medium"
-          >
-            {loading ? "..." : "Deposit"}
-          </button>
-        </div>
+      <div className="flex items-center bg-surface-container-low rounded mb-3">
+        <button
+          onClick={() => { setMode("deposit"); setAmount(""); }}
+          className={`flex-1 py-2 text-center text-[13px] font-medium rounded-l transition-colors cursor-pointer ${
+            isDeposit
+              ? "bg-positive text-white"
+              : "text-outline hover:text-white"
+          }`}
+        >
+          Deposit
+        </button>
+        <button
+          onClick={() => { setMode("withdraw"); setAmount(""); }}
+          className={`flex-1 py-2 text-center text-[13px] font-medium rounded-r transition-colors cursor-pointer ${
+            !isDeposit
+              ? "bg-surface-container-high text-white"
+              : "text-outline hover:text-white"
+          }`}
+        >
+          Withdraw
+        </button>
       </div>
 
-      <div className="mb-4">
-        <label className="text-outline text-[12px] mb-1 block">Withdraw USDC</label>
-        <div className="flex gap-2">
-          <input
-            type="number"
-            value={withdrawAmount}
-            onChange={(e) => setWithdrawAmount(e.target.value)}
-            placeholder="0.00"
-            className="flex-1 bg-surface-container-low border border-surface-container-high rounded px-3 py-2 text-white font-mono-data text-[14px] focus:outline-none focus:border-outline"
-          />
-          <button
-            onClick={handleWithdraw}
-            disabled={loading || !withdrawAmount}
-            className="bg-surface-container-high text-white px-4 py-2 rounded hover:bg-surface-variant active:scale-[0.96] transition-transform disabled:opacity-50 disabled:cursor-not-allowed text-[14px] font-medium"
-          >
-            {loading ? "..." : "Withdraw"}
-          </button>
-        </div>
+      <div className="flex items-center bg-surface-container-low rounded">
+        <input
+          type="number"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          placeholder="0.00"
+          className="flex-1 bg-transparent px-3 py-2 text-white font-mono-data text-[14px] focus:outline-none min-w-0"
+        />
+        <button
+          onClick={handleAction}
+          disabled={loading || !amount}
+          className={`px-4 py-2 rounded-r text-white text-[14px] font-medium active:scale-[0.96] transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+            isDeposit
+              ? "bg-positive hover:bg-positive/90"
+              : "bg-surface-container-high hover:bg-surface-variant"
+          }`}
+        >
+          {loading ? "..." : isDeposit ? "Deposit" : "Withdraw"}
+        </button>
       </div>
     </div>
   );
