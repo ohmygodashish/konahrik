@@ -1110,6 +1110,18 @@ export type Konahrik = {
             "type": {
               "option": "i64"
             }
+          },
+          {
+            "name": "baseReserve",
+            "type": {
+              "option": "u128"
+            }
+          },
+          {
+            "name": "quoteReserve",
+            "type": {
+              "option": "u128"
+            }
           }
         ]
       }
@@ -1144,4 +1156,3 @@ export type Konahrik = {
     }
   ]
 };
-
