@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useMemo, ReactNode } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { AnchorProvider, Program } from "@coral-xyz/anchor";
+import { AnchorProvider, Program } from "@anchor-lang/core";
 import { Connection } from "@solana/web3.js";
 import { DEVNET_RPC, PROGRAM_ID } from "@/lib/constants";
 import IDL_JSON from "@/types/konahrik.json";

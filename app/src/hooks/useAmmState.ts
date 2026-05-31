@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useAnchor } from "@/providers/AnchorProvider";
 import { getAmmStatePDA } from "@/lib/anchor-client";
 import { POLLING_INTERVAL_MS } from "@/lib/constants";
-import type { BN } from "@coral-xyz/anchor";
+import type { BN } from "@anchor-lang/core";
 import { PublicKey } from "@solana/web3.js";
 
 export interface AmmStateData {

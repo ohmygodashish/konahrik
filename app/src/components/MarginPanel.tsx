@@ -5,7 +5,7 @@ import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { useAnchor } from "@/providers/AnchorProvider";
 import { getMarginPDA, getAmmStatePDA, getVaultAuthorityPDA } from "@/lib/anchor-client";
 import { submitTransaction } from "@/lib/tx-helpers";
-import { BN } from "@coral-xyz/anchor";
+import { BN } from "@anchor-lang/core";
 import { PublicKey, SystemProgram } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID, getAssociatedTokenAddress, createAssociatedTokenAccountInstruction } from "@solana/spl-token";
 

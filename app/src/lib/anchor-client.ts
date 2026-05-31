@@ -1,4 +1,4 @@
-import { AnchorProvider, Program, type Idl } from "@coral-xyz/anchor";
+import { AnchorProvider, Program, type Idl } from "@anchor-lang/core";
 import { Connection, PublicKey } from "@solana/web3.js";
 import type { AnchorWallet } from "@solana/wallet-adapter-react";
 import type { Konahrik } from "@/types/konahrik";
