@@ -1,6 +1,6 @@
 # Product Requirements Document
 ## Project: Konahrik - vAMM Perpetuals DEX
-**Version:** 2.3 (Updated for Anchor 1.0.1, Next.js 16.2.x, Node 22+, Pyth manual deserialization, Sonner toasts, resizable panels)
+**Version:** 2.4 (Added update_config reserve alignment, entry_price scale fix to 1e6, Dashboard page, PriceChart, ProtocolStatsFooter, localStorage history, tab icon)
 **Target:** Solana India Fellowship Capstone Project
 **Network:** Devnet
 **Stack:** Anchor 1.0.1 (Rust) · Next.js 16.2.x · Tailwind CSS · TypeScript · Pyth Oracle · Node.js 22+
@@ -289,7 +289,7 @@ system_program         Program<System>
     position.is_long = is_long
     position.size = base_acquired (or base_released for short) as u64
     position.notional = notional
-    position.entry_price = (notional as u128 * 1_000_000 / position.size as u128) as u64
+    position.entry_price = (notional as u128 * 1_000_000_000 / position.size as u128) as u64
     position.margin = margin_locked
     position.funding_snapshot = amm_state.cumulative_funding_rate
     position.bump = bumps.position
@@ -493,6 +493,48 @@ token_program          Program<Token>
 // 5. Deduct from total collateral
 5. user_margin_account.collateral -= amount
 ```
+### Instruction 8 (admin): `update_config`
+**Who:** AMM authority only.
+**Updates:** `AmmState` parameters in-place. Can set config fields (margin bps, fees, funding period) and/or re-align vAMM reserves.
+
+**Parameters:**
+```rust
+pub struct UpdateConfigParams {
+    pub initial_margin_bps: Option<u16>,
+    pub maint_margin_bps: Option<u16>,
+    pub liquidation_fee_bps: Option<u16>,
+    pub trading_fee_bps: Option<u16>,
+    pub funding_period: Option<i64>,
+    pub base_reserve: Option<u128>,     // new base asset reserve (lamports, 1e9)
+    pub quote_reserve: Option<u128>,    // new quote asset reserve (USDC, 1e6)
+}
+```
+
+**Accounts:**
+```rust
+amm_state    PDA [b"amm_state"]    mut, has_one = authority
+authority    [signer]
+```
+
+**Logic:**
+```rust
+// 1-5: Apply each Option field if Some
+1. Set each config field if present
+// 6. If either reserve is set, recalculate k
+6. if base_reserve.is_some() || quote_reserve.is_some() {
+       amm_state.k = base * quote   // checked_mul
+   }
+```
+
+**CLI usage:**
+```bash
+# Set mark price to $80
+ts-node scripts/update-config.ts --price 80
+# Combined with config changes
+ts-node scripts/update-config.ts --price 85 --funding-period 10 --trading-fee 15
+# Preview only
+ts-node scripts/update-config.ts --show
+```
 
 ## 4. Custom Errors
 
@@ -672,13 +714,15 @@ konahrik/
 │               ├── deposit_margin.rs
 │               ├── open_position.rs
 │               ├── close_position.rs
-│               ├── update_funding.rs   ← [stretch]
-│               ├── liquidate.rs        ← [stretch]
+│               ├── update_config.rs     ← admin params + reserve alignment
+│               ├── update_funding.rs
+│               ├── liquidate.rs
 │               └── withdraw_margin.rs
 ├── tests/
 │   └── konahrik.ts
 ├── scripts/
 │   ├── init.ts              ← AMM initialization (required, run once after deploy)
+│   ├── update-config.ts     ← Admin config + reserve updater (--price, --base-reserve, --quote-reserve)
 │   └── faucet.ts            ← Test USDC distribution (convenience script)
 └── app/                            <- Next.js frontend
     ├── package.json
@@ -686,25 +730,32 @@ konahrik/
     ├── tailwind.config.js
     └── src/
         ├── app/
-        │   ├── layout.tsx
-        │   └── page.tsx
+        │   ├── layout.tsx           ← metadata title "Konahrik", tab icon /icon.svg, Navbar
+        │   ├── page.tsx             ← redirects to /terminal
+        │   ├── terminal/page.tsx    ← trading page with chart, panels, ProtocolStatsFooter
+        │   └── dashboard/page.tsx   ← account overview, margin gauge, positions table
         ├── components/
-        │   ├── Navbar.tsx             ← top navigation with wallet connect
-        │   ├── MarketHeader.tsx       ← mark price, index price, OI display
-        │   ├── MarginPanel.tsx        ← deposit/withdraw margin UI
+        │   ├── Navbar.tsx             ← top navigation with wallet connect (Terminal, Dashboard, GitHub)
+        │   ├── WalletButton.tsx       ← connect/disconnect, hover shows red "Disconnect"
+        │   ├── MarketHeader.tsx       ← mark price, index price display
+        │   ├── PriceChart.tsx         ← TradingView lightweight-charts v5, mark/index line series, toggle
+        │   ├── MarginPanel.tsx        ← single-input deposit/withdraw with pill toggle
         │   ├── TradingPanel.tsx       ← open position form
+        │   ├── ProtocolStatsFooter.tsx ← mark price, OI, funding rate, trading fee (terminal only)
+        │   ├── NetworkFooter.tsx      ← minimal "Devnet" badge (unused in layout, kept for reference)
         │   ├── BottomPanel.tsx        ← tabbed panel (Balances, Positions, History)
-        │   ├── PositionsTab.tsx       ← open positions with PnL + close button
+        │   ├── PositionsTab.tsx       ← open positions with PnL + close button, format "X SOL (Yx) ($Z)"
         │   ├── BalancesTab.tsx        ← margin breakdown
-        │   ├── HistoryTab.tsx         ← closed positions placeholder
-        │   └── ProtocolStatsFooter.tsx ← network status + protocol metrics
+        │   └── HistoryTab.tsx         ← closed positions from localStorage, format "X SOL (Yx) ($Z)"
         ├── hooks/
-        │   └── useAmmState.ts        ← polling hook for AmmState
+        │   ├── useAmmState.ts        ← 3s polling of AmmState (mark price, OI, fees)
+        │   └── useIndexPrice.ts      ← 3s polling of Binance SOL/USDT for index price history
         ├── lib/
-        │   ├── constants.ts           ← PROGRAM_ID, feed addresses, RPC URLs
+        │   ├── constants.ts           ← PROGRAM_ID, feed addresses, RPC URLs, SCALE constants
         │   ├── anchor-client.ts       ← provider, program, PDA helpers
         │   ├── price-client.ts        ← Binance REST for live price display
-        │   ├── math.ts                ← client-side liq price + PnL calculations
+        │   ├── history.ts             ← localStorage read/write for closed positions
+        │   ├── math.ts                ← client-side mark price, liq price, PnL, margin ratio
         │   └── tx-helpers.ts          ← submitTransaction wrapper + error parsing
         ├── providers/
         │   ├── SolanaProviders.tsx    ← wallet adapter providers
@@ -1032,12 +1083,12 @@ async function main() {
   await program.methods
     .initializeAmm({
       initialBaseReserve: new anchor.BN("1000000000000000"),   // 1M SOL * 1e9
-      initialQuoteReserve: new anchor.BN("140000000000000"),   // 140M USDC * 1e6 → $140 start price
+      initialQuoteReserve: new anchor.BN("80000000000000"),   // 80M USDC * 1e6 → $80 start price
       initialMarginBps: 1000,
       maintMarginBps: 625,
       liquidationFeeBps: 250,
       tradingFeeBps: 10,
-      fundingPeriod: new anchor.BN(3600),
+      fundingPeriod: new anchor.BN(5),                        // 5 seconds for fast devnet testing
     })
     .accounts({
       authority: walletKeypair.publicKey,
