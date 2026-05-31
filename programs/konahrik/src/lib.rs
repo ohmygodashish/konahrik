@@ -46,6 +46,13 @@ pub mod konahrik {
         instructions::handle_update_funding(ctx)
     }
 
+    pub fn update_config(
+        ctx: Context<UpdateConfig>,
+        params: UpdateConfigParams,
+    ) -> Result<()> {
+        instructions::handle_update_config(ctx, params)
+    }
+
     pub fn liquidate(
         ctx: Context<Liquidate>,
         params: LiquidateParams,
