@@ -13,13 +13,13 @@ export function getMarkPrice(baseReserve: bigint, quoteReserve: bigint): number 
 export function getLiquidationPrice(
   entryPrice: number,
   isLong: boolean,
-  initialMarginBps: number,
+  leverage: number,
   maintMarginBps: number
 ): number {
-  const buffer = (initialMarginBps - maintMarginBps) / 10_000;
+  const maintMargin = maintMarginBps / 10_000;
   return isLong
-    ? entryPrice * (1 - buffer)
-    : entryPrice * (1 + buffer);
+    ? entryPrice * (1 - 1 / leverage + maintMargin)
+    : entryPrice * (1 + 1 / leverage - maintMargin);
 }
 
 export function getUnrealizedPnl(

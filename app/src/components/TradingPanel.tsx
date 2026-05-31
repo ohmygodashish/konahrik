@@ -11,7 +11,7 @@ import {
 } from "@/lib/anchor-client";
 import { submitTransaction } from "@/lib/tx-helpers";
 import { getLiquidationPrice, getMarkPrice } from "@/lib/math";
-import { BN } from "@coral-xyz/anchor";
+import { BN } from "@anchor-lang/core";
 import { PublicKey, SystemProgram } from "@solana/web3.js";
 import { PYTH_SOL_USD_FEED } from "@/lib/constants";
 
@@ -70,7 +70,7 @@ export function TradingPanel() {
       ? getLiquidationPrice(
           entryPrice,
           isLong,
-          ammState.initialMarginBps,
+          leverage,
           ammState.maintMarginBps
         )
       : 0;
