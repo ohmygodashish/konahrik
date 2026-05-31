@@ -301,6 +301,152 @@ export type Konahrik = {
       ]
     },
     {
+      "name": "liquidate",
+      "discriminator": [
+        223,
+        179,
+        226,
+        125,
+        48,
+        46,
+        39,
+        74
+      ],
+      "accounts": [
+        {
+          "name": "liquidator",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "liquidatorUsdcAccount",
+          "writable": true
+        },
+        {
+          "name": "positionOwnerMargin",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  103,
+                  105,
+                  110
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "params.position_owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "position",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  115,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "params.position_owner"
+              },
+              {
+                "kind": "arg",
+                "path": "params.position_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "ammState",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  109,
+                  109,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true
+        },
+        {
+          "name": "vaultAuthority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  95,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pythPriceFeed"
+        },
+        {
+          "name": "tokenProgram",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "params",
+          "type": {
+            "defined": {
+              "name": "liquidateParams"
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": "openPosition",
       "discriminator": [
         135,
@@ -411,6 +557,105 @@ export type Konahrik = {
           }
         }
       ]
+    },
+    {
+      "name": "updateConfig",
+      "discriminator": [
+        29,
+        158,
+        252,
+        191,
+        10,
+        83,
+        219,
+        99
+      ],
+      "accounts": [
+        {
+          "name": "ammState",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  109,
+                  109,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "ammState"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "params",
+          "type": {
+            "defined": {
+              "name": "updateConfigParams"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "updateFunding",
+      "discriminator": [
+        224,
+        66,
+        9,
+        70,
+        75,
+        81,
+        94,
+        88
+      ],
+      "accounts": [
+        {
+          "name": "ammState",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  109,
+                  109,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pythPriceFeed"
+        },
+        {
+          "name": "clock",
+          "address": "SysvarC1ock11111111111111111111111111111111"
+        }
+      ],
+      "args": []
     },
     {
       "name": "withdrawMargin",
@@ -627,6 +872,11 @@ export type Konahrik = {
       "code": 6012,
       "name": "insufficientLiquidity",
       "msg": "Insufficient liquidity in vAMM."
+    },
+    {
+      "code": 6013,
+      "name": "selfLiquidation",
+      "msg": "Self-liquidation not allowed."
     }
   ],
   "types": [
@@ -743,6 +993,22 @@ export type Konahrik = {
       }
     },
     {
+      "name": "liquidateParams",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "positionOwner",
+            "type": "pubkey"
+          },
+          {
+            "name": "positionId",
+            "type": "u32"
+          }
+        ]
+      }
+    },
+    {
       "name": "openPositionParams",
       "type": {
         "kind": "struct",
@@ -811,6 +1077,44 @@ export type Konahrik = {
       }
     },
     {
+      "name": "updateConfigParams",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "initialMarginBps",
+            "type": {
+              "option": "u16"
+            }
+          },
+          {
+            "name": "maintMarginBps",
+            "type": {
+              "option": "u16"
+            }
+          },
+          {
+            "name": "liquidationFeeBps",
+            "type": {
+              "option": "u16"
+            }
+          },
+          {
+            "name": "tradingFeeBps",
+            "type": {
+              "option": "u16"
+            }
+          },
+          {
+            "name": "fundingPeriod",
+            "type": {
+              "option": "i64"
+            }
+          }
+        ]
+      }
+    },
+    {
       "name": "userMarginAccount",
       "type": {
         "kind": "struct",
@@ -840,3 +1144,4 @@ export type Konahrik = {
     }
   ]
 };
+
